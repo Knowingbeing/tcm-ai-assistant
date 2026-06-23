@@ -64,10 +64,14 @@ def render_consultation_tab(engine):
         chief_complaint = st.text_area("主诉", placeholder="请描述主要症状，如：头痛、发热3天", height=100)
 
         st.subheader("症状选择")
-        conn = get_connection()
-        df_symptoms = pd.read_sql("SELECT symptom_name FROM symptoms ORDER BY category, symptom_name", conn)
-        conn.close()
-        all_symptoms = df_symptoms['symptom_name'].tolist()
+        try:
+            conn = get_connection()
+            df_symptoms = pd.read_sql("SELECT symptom_name FROM symptoms ORDER BY category, symptom_name", conn)
+            all_symptoms = df_symptoms['symptom_name'].tolist()
+        except Exception:
+            all_symptoms = ["发热", "恶寒", "头痛", "咳嗽", "鼻塞", "流涕", "咽喉痛",
+                          "胸闷", "心悸", "腹痛", "腹泻", "便秘", "食欲不振", "口渴",
+                          "口苦", "失眠", "乏力", "自汗", "腰膝酸软", "畏寒肢冷"]
         selected_symptoms = st.multiselect("请选择伴随症状", all_symptoms)
 
         st.subheader("舌脉信息")
@@ -142,7 +146,6 @@ def save_consultation(name, age, gender, chief_complaint, symptoms, tongue, puls
         """, (consultation_id, symptom))
 
     conn.commit()
-    conn.close()
 
 def render_analytics_tab():
     st.header("数据分析看板")
@@ -233,8 +236,6 @@ def render_analytics_tab():
         st.plotly_chart(fig_category, use_container_width=True)
     else:
         st.info("暂无数据")
-
-    conn.close()
 
 def render_knowledge_tab():
     st.header("中医知识库")
@@ -342,8 +343,6 @@ def render_knowledge_tab():
         **下焦篇第1条**：风温、温热、温疫、温毒，传入下焦，劫烁真阴，或因误攻，或因妄汗，神倦瘛疭，脉气虚弱，舌绛苔少，时时欲脱者，大定风珠主之。
         """)
 
-    conn.close()
-
 def render_herb_tab():
     st.header("中药库")
 
@@ -392,8 +391,6 @@ def render_herb_tab():
     else:
         st.info("未找到符合条件的中药")
 
-    conn.close()
-
 def render_settings_tab():
     st.header("系统设置")
 
@@ -418,7 +415,6 @@ def render_settings_tab():
             "症状": pd.read_sql("SELECT COUNT(*) as cnt FROM symptoms", conn).iloc[0, 0],
             "中药": pd.read_sql("SELECT COUNT(*) as cnt FROM herbs", conn).iloc[0, 0],
         }
-        conn.close()
         st.write("**知识库统计**")
         for k, v in stats.items():
             st.write(f"- {k}：{v} 条")
