@@ -21,13 +21,17 @@ def init_db():
     init_database()
     insert_sample_data()
 
-@st.cache_resource
 def load_engine():
     return TCMDiagnosisEngine()
 
+def get_engine():
+    if "engine" not in st.session_state:
+        st.session_state.engine = TCMDiagnosisEngine()
+    return st.session_state.engine
+
 def main():
     init_db()
-    engine = load_engine()
+    engine = get_engine()
 
     st.title("🏥 中医AI智能问诊助手")
     st.markdown("---")
@@ -403,7 +407,10 @@ def render_settings_tab():
     api_key = st.text_input("OpenAI API Key", type="password", placeholder="sk-...")
     if api_key:
         os.environ["OPENAI_API_KEY"] = api_key
-        st.success("API Key 已配置")
+        st.session_state.engine = TCMDiagnosisEngine()
+        st.success("API Key 已配置，AI智能诊断已启用")
+    else:
+        st.info("未配置 API Key，当前使用演示模式（基于规则的诊断）")
 
     st.subheader("数据管理")
     col1, col2 = st.columns(2)
