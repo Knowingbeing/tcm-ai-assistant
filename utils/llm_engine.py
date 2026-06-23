@@ -7,9 +7,76 @@ load_dotenv()
 
 class TCMDiagnosisEngine:
     def __init__(self):
-        api_key = os.getenv("OPENAI_API_KEY", "demo-key")
-        self.client = OpenAI(api_key=api_key)
+        api_key = os.getenv("OPENAI_API_KEY", "")
+        self.has_api_key = bool(api_key) and api_key != "demo-key"
+        if self.has_api_key:
+            self.client = OpenAI(api_key=api_key)
         self.knowledge_base = self._load_knowledge_base()
+
+    def _rule_based_diagnosis(self, chief_complaint: str, symptoms: List[str],
+                              tongue_sign: str, pulse_sign: str) -> Dict:
+        all_text = chief_complaint + " " + " ".join(symptoms) + " " + tongue_sign + " " + pulse_sign
+
+        if any(w in all_text for w in ["恶寒", "无汗", "鼻塞", "流清涕", "头身疼痛"]):
+            return {"syndrome": "太阳伤寒证", "syndrome_category": "六经辨证",
+                    "analysis": "患者恶寒、无汗、鼻塞流清涕、头身疼痛，为风寒之邪侵袭太阳经，卫阳被遏，营阴郁滞。",
+                    "formula": "麻黄汤", "formula_adjustment": "若鼻塞重可加辛夷、苍耳子",
+                    "treatment_principle": "发汗解表、宣肺平喘", "confidence": 80,
+                    "additional_notes": "服药后温覆取微汗，忌食生冷。"}
+        elif any(w in all_text for w in ["发热", "汗出", "恶风", "脉浮缓"]):
+            return {"syndrome": "太阳中风证", "syndrome_category": "六经辨证",
+                    "analysis": "患者发热汗出、恶风，为风邪袭表，营卫不和。",
+                    "formula": "桂枝汤", "formula_adjustment": "若项背强可加葛根",
+                    "treatment_principle": "解肌发表、调和营卫", "confidence": 80,
+                    "additional_notes": "服后啜热稀粥以助药力。"}
+        elif any(w in all_text for w in ["口苦", "咽干", "往来寒热", "胸胁苦满", "心烦喜呕"]):
+            return {"syndrome": "少阳病证", "syndrome_category": "六经辨证",
+                    "analysis": "患者口苦咽干、往来寒热、胸胁苦满，为邪犯少阳胆经，枢机不利。",
+                    "formula": "小柴胡汤", "formula_adjustment": "若口渴去半夏加天花粉",
+                    "treatment_principle": "和解少阳", "confidence": 85,
+                    "additional_notes": "忌食油腻辛辣。"}
+        elif any(w in all_text for w in ["身大热", "汗大出", "口大渴", "脉洪大"]):
+            return {"syndrome": "阳明经证", "syndrome_category": "六经辨证",
+                    "analysis": "患者身热、大汗、大渴、脉洪大，为邪热亢盛，充斥内外。",
+                    "formula": "白虎汤", "formula_adjustment": "若气虚可加人参",
+                    "treatment_principle": "清热生津", "confidence": 85,
+                    "additional_notes": "高热期间注意物理降温。"}
+        elif any(w in all_text for w in ["胸胁胀痛", "善太息", "情志抑郁", "脉弦"]):
+            return {"syndrome": "肝气郁结证", "syndrome_category": "脏腑辨证",
+                    "analysis": "患者胸胁胀痛、善太息、情志抑郁，为肝失疏泄，气机郁滞。",
+                    "formula": "逍遥散", "formula_adjustment": "若肝郁化火可加丹皮、栀子",
+                    "treatment_principle": "疏肝解郁、养血健脾", "confidence": 80,
+                    "additional_notes": "保持心情舒畅，适当运动。"}
+        elif any(w in all_text for w in ["心悸", "失眠", "多梦", "健忘", "面色萎黄"]):
+            return {"syndrome": "心脾两虚证", "syndrome_category": "脏腑辨证",
+                    "analysis": "患者心悸失眠、多梦健忘、面色萎黄，为心血不足，脾气虚弱。",
+                    "formula": "归脾汤", "formula_adjustment": "若心血虚重可加柏子仁",
+                    "treatment_principle": "益气补血、健脾养心", "confidence": 80,
+                    "additional_notes": "规律作息，避免过度劳累。"}
+        elif any(w in all_text for w in ["咳嗽", "痰多", "胸闷", "苔白腻"]):
+            return {"syndrome": "痰湿蕴肺证", "syndrome_category": "脏腑辨证",
+                    "analysis": "患者咳嗽痰多、胸闷、苔白腻，为痰湿内停，阻滞气机。",
+                    "formula": "二陈汤", "formula_adjustment": "若咳喘可加杏仁、苏子",
+                    "treatment_principle": "燥湿化痰、理气和中", "confidence": 75,
+                    "additional_notes": "忌食肥甘厚味，戒烟酒。"}
+        elif any(w in all_text for w in ["畏寒", "肢冷", "腰膝酸软", "阳痿", "夜尿多"]):
+            return {"syndrome": "肾阳虚证", "syndrome_category": "脏腑辨证",
+                    "analysis": "患者畏寒肢冷、腰膝酸软、夜尿多，为肾阳不足，温煦功能减退。",
+                    "formula": "金匮肾气丸", "formula_adjustment": "若阳虚重可加鹿茸",
+                    "treatment_principle": "温补肾阳", "confidence": 80,
+                    "additional_notes": "避免熬夜，节制房事。"}
+        elif any(w in all_text for w in ["乏力", "气短", "自汗", "食少", "便溏"]):
+            return {"syndrome": "脾气虚证", "syndrome_category": "脏腑辨证",
+                    "analysis": "患者乏力、气短、自汗、食少便溏，为脾气不足，运化失健。",
+                    "formula": "四君子汤", "formula_adjustment": "若腹胀可加陈皮",
+                    "treatment_principle": "健脾益气", "confidence": 80,
+                    "additional_notes": "饮食宜清淡，少食多餐。"}
+        else:
+            return {"syndrome": "待辨证", "syndrome_category": "待分类",
+                    "analysis": "根据提供的症状信息，建议补充更多四诊信息（望闻问切）以明确辨证。",
+                    "formula": "待推荐", "formula_adjustment": "建议补充舌象脉象",
+                    "treatment_principle": "四诊合参后确定", "confidence": 50,
+                    "additional_notes": "演示模式：配置 OpenAI API Key 后可使用 AI 智能辨证功能。前往「系统设置」页面配置。"}
 
     def _load_knowledge_base(self) -> str:
         knowledge = """
@@ -344,6 +411,9 @@ class TCMDiagnosisEngine:
 
     def analyze_symptoms(self, chief_complaint: str, symptoms: List[str],
                         tongue_sign: str, pulse_sign: str) -> Dict:
+        if not self.has_api_key:
+            return self._rule_based_diagnosis(chief_complaint, symptoms, tongue_sign, pulse_sign)
+
         prompt = f"""
 你是一位经验丰富的中医师，请根据以下问诊信息进行辨证论治。
 

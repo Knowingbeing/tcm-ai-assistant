@@ -150,92 +150,97 @@ def save_consultation(name, age, gender, chief_complaint, symptoms, tongue, puls
 def render_analytics_tab():
     st.header("数据分析看板")
 
-    conn = get_connection()
+    try:
+        conn = get_connection()
 
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        total_patients = pd.read_sql("SELECT COUNT(*) as cnt FROM patients", conn).iloc[0, 0]
-        st.metric("总患者数", total_patients)
-    with col2:
-        total_consultations = pd.read_sql("SELECT COUNT(*) as cnt FROM consultations", conn).iloc[0, 0]
-        st.metric("总问诊数", total_consultations)
-    with col3:
-        avg_confidence = pd.read_sql("SELECT AVG(ai_confidence) as avg_conf FROM consultations WHERE ai_confidence > 0", conn).iloc[0, 0]
-        st.metric("平均置信度", f"{avg_confidence:.1f}%" if avg_confidence else "N/A")
-    with col4:
-        confirmed = pd.read_sql("SELECT COUNT(*) as cnt FROM consultations WHERE doctor_confirmed = 1", conn).iloc[0, 0]
-        st.metric("医生确认数", confirmed)
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            total_patients = pd.read_sql("SELECT COUNT(*) as cnt FROM patients", conn).iloc[0, 0]
+            st.metric("总患者数", total_patients)
+        with col2:
+            total_consultations = pd.read_sql("SELECT COUNT(*) as cnt FROM consultations", conn).iloc[0, 0]
+            st.metric("总问诊数", total_consultations)
+        with col3:
+            avg_confidence = pd.read_sql("SELECT AVG(ai_confidence) as avg_conf FROM consultations WHERE ai_confidence > 0", conn).iloc[0, 0]
+            st.metric("平均置信度", f"{avg_confidence:.1f}%" if avg_confidence else "N/A")
+        with col4:
+            confirmed = pd.read_sql("SELECT COUNT(*) as cnt FROM consultations WHERE doctor_confirmed = 1", conn).iloc[0, 0]
+            st.metric("医生确认数", confirmed)
 
-    st.markdown("---")
+        st.markdown("---")
 
-    col_left, col_right = st.columns(2)
+        col_left, col_right = st.columns(2)
 
-    with col_left:
-        st.subheader("问诊趋势（近30天）")
-        df_trend = pd.read_sql("""
-            SELECT DATE(consultation_date) as date, COUNT(*) as count
-            FROM consultations
-            WHERE consultation_date >= date('now', '-30 days')
-            GROUP BY DATE(consultation_date)
-            ORDER BY date
+        with col_left:
+            st.subheader("问诊趋势（近30天）")
+            df_trend = pd.read_sql("""
+                SELECT DATE(consultation_date) as date, COUNT(*) as count
+                FROM consultations
+                WHERE consultation_date >= date('now', '-30 days')
+                GROUP BY DATE(consultation_date)
+                ORDER BY date
+            """, conn)
+
+            if not df_trend.empty:
+                fig_trend = px.line(df_trend, x='date', y='count', title="每日问诊量")
+                st.plotly_chart(fig_trend, use_container_width=True)
+            else:
+                st.info("暂无数据")
+
+        with col_right:
+            st.subheader("证型分布")
+            df_syndrome = pd.read_sql("""
+                SELECT s.syndrome_name, COUNT(*) as count
+                FROM consultations c
+                JOIN syndromes s ON c.ai_diagnosed_syndrome_id = s.syndrome_id
+                GROUP BY s.syndrome_name
+                ORDER BY count DESC
+            """, conn)
+
+            if not df_syndrome.empty:
+                fig_syndrome = px.pie(df_syndrome, names='syndrome_name', values='count', title="证型分布")
+                st.plotly_chart(fig_syndrome, use_container_width=True)
+            else:
+                st.info("暂无数据")
+
+        st.markdown("---")
+
+        st.subheader("症状频率统计")
+        df_symptoms = pd.read_sql("""
+            SELECT symptom_name, COUNT(*) as frequency
+            FROM consultation_symptoms cs
+            JOIN symptoms s ON cs.symptom_id = s.symptom_id
+            GROUP BY symptom_name
+            ORDER BY frequency DESC
+            LIMIT 10
         """, conn)
 
-        if not df_trend.empty:
-            fig_trend = px.line(df_trend, x='date', y='count', title="每日问诊量")
-            st.plotly_chart(fig_trend, use_container_width=True)
+        if not df_symptoms.empty:
+            fig_symptoms = px.bar(df_symptoms, x='symptom_name', y='frequency', title="Top 10 症状频率")
+            st.plotly_chart(fig_symptoms, use_container_width=True)
         else:
             st.info("暂无数据")
 
-    with col_right:
-        st.subheader("证型分布")
-        df_syndrome = pd.read_sql("""
-            SELECT s.syndrome_name, COUNT(*) as count
+        st.markdown("---")
+
+        st.subheader("证型分类统计")
+        df_category = pd.read_sql("""
+            SELECT s.category, COUNT(*) as count
             FROM consultations c
             JOIN syndromes s ON c.ai_diagnosed_syndrome_id = s.syndrome_id
-            GROUP BY s.syndrome_name
+            GROUP BY s.category
             ORDER BY count DESC
         """, conn)
 
-        if not df_syndrome.empty:
-            fig_syndrome = px.pie(df_syndrome, names='syndrome_name', values='count', title="证型分布")
-            st.plotly_chart(fig_syndrome, use_container_width=True)
+        if not df_category.empty:
+            fig_category = px.bar(df_category, x='category', y='count', title="证型分类分布", color='category')
+            st.plotly_chart(fig_category, use_container_width=True)
         else:
             st.info("暂无数据")
 
-    st.markdown("---")
-
-    st.subheader("症状频率统计")
-    df_symptoms = pd.read_sql("""
-        SELECT symptom_name, COUNT(*) as frequency
-        FROM consultation_symptoms cs
-        JOIN symptoms s ON cs.symptom_id = s.symptom_id
-        GROUP BY symptom_name
-        ORDER BY frequency DESC
-        LIMIT 10
-    """, conn)
-
-    if not df_symptoms.empty:
-        fig_symptoms = px.bar(df_symptoms, x='symptom_name', y='frequency', title="Top 10 症状频率")
-        st.plotly_chart(fig_symptoms, use_container_width=True)
-    else:
-        st.info("暂无数据")
-
-    st.markdown("---")
-
-    st.subheader("证型分类统计")
-    df_category = pd.read_sql("""
-        SELECT s.category, COUNT(*) as count
-        FROM consultations c
-        JOIN syndromes s ON c.ai_diagnosed_syndrome_id = s.syndrome_id
-        GROUP BY s.category
-        ORDER BY count DESC
-    """, conn)
-
-    if not df_category.empty:
-        fig_category = px.bar(df_category, x='category', y='count', title="证型分类分布", color='category')
-        st.plotly_chart(fig_category, use_container_width=True)
-    else:
-        st.info("暂无数据")
+    except Exception as e:
+        st.error(f"数据分析加载失败：{str(e)}")
+        st.info("请确保数据库已正确初始化")
 
 def render_knowledge_tab():
     st.header("中医知识库")
