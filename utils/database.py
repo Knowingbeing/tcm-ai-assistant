@@ -3,7 +3,11 @@ import os
 from datetime import datetime
 from typing import List, Dict, Optional
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "tcm_consultation.db")
+# Streamlit Cloud 使用临时目录，本地使用项目目录
+if os.getenv("STREAMLIT_RUNTIME"):
+    DB_PATH = "/tmp/tcm_consultation.db"
+else:
+    DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "tcm_consultation.db")
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
