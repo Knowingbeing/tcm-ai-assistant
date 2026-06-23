@@ -16,17 +16,15 @@ st.set_page_config(
     layout="wide"
 )
 
-@st.cache_resource
 def init_db():
     init_database()
     insert_sample_data()
 
-def load_engine():
-    return TCMDiagnosisEngine()
-
 def get_engine():
-    if "engine" not in st.session_state:
-        st.session_state.engine = TCMDiagnosisEngine()
+    api_key = st.session_state.get("api_key", "")
+    if "engine" not in st.session_state or st.session_state.get("engine_key") != api_key:
+        st.session_state.engine = TCMDiagnosisEngine(api_key)
+        st.session_state.engine_key = api_key
     return st.session_state.engine
 
 def main():
@@ -404,13 +402,39 @@ def render_settings_tab():
     st.header("系统设置")
 
     st.subheader("API配置")
-    api_key = st.text_input("OpenAI API Key", type="password", placeholder="sk-...")
-    if api_key:
-        os.environ["OPENAI_API_KEY"] = api_key
-        st.session_state.engine = TCMDiagnosisEngine()
-        st.success("API Key 已配置，AI智能诊断已启用")
+    
+    current_key = st.session_state.get("api_key", "")
+    api_key = st.text_input("OpenAI API Key", type="password", placeholder="sk-...", value=current_key)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("💾 保存 API Key", type="primary"):
+            if api_key and api_key.startswith("sk-"):
+                st.session_state.api_key = api_key
+                st.session_state.engine = TCMDiagnosisEngine(api_key)
+                st.session_state.engine_key = api_key
+                st.success("✅ API Key 已保存，AI智能诊断已启用")
+                st.rerun()
+            elif api_key:
+                st.error("❌ API Key 格式错误，应以 'sk-' 开头")
+            else:
+                st.session_state.api_key = ""
+                st.session_state.engine = TCMDiagnosisEngine("")
+                st.session_state.engine_key = ""
+                st.info("已切换到演示模式")
+                st.rerun()
+    with col2:
+        if st.button("🗑️ 清除 API Key"):
+            st.session_state.api_key = ""
+            st.session_state.engine = TCMDiagnosisEngine("")
+            st.session_state.engine_key = ""
+            st.info("已切换到演示模式")
+            st.rerun()
+    
+    if current_key and current_key.startswith("sk-"):
+        st.success("🔑 当前状态：AI智能诊断已启用")
     else:
-        st.info("未配置 API Key，当前使用演示模式（基于规则的诊断）")
+        st.info("📋 当前状态：演示模式（基于规则的诊断）")
 
     st.subheader("数据管理")
     col1, col2 = st.columns(2)

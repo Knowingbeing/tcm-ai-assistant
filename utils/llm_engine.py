@@ -6,11 +6,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class TCMDiagnosisEngine:
-    def __init__(self):
-        api_key = os.getenv("OPENAI_API_KEY", "")
-        self.has_api_key = bool(api_key) and api_key != "demo-key"
+    def __init__(self, api_key: str = ""):
+        if not api_key:
+            api_key = os.getenv("OPENAI_API_KEY", "")
+        self.has_api_key = bool(api_key) and api_key.startswith("sk-")
         if self.has_api_key:
-            self.client = OpenAI(api_key=api_key)
+            try:
+                self.client = OpenAI(api_key=api_key)
+            except Exception:
+                self.has_api_key = False
         self.knowledge_base = self._load_knowledge_base()
 
     def _rule_based_diagnosis(self, chief_complaint: str, symptoms: List[str],
