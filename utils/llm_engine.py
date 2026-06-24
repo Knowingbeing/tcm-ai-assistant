@@ -26,7 +26,7 @@ API_PROVIDERS = {
         "key_prefix": "sk-",
     },
     "MiMo (小米)": {
-        "base_url": "https://api.mimo.ai/v1",
+        "base_url": "https://token-plan-cn.xiaomimimo.com/v1",
         "models": ["mimo-auto", "mimo-pro"],
         "default_model": "mimo-auto",
         "key_prefix": "sk-",
