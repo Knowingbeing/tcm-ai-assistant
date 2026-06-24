@@ -13,8 +13,120 @@ from data.tcm_data import FORMULAS, SYNDROMES, HERBS
 st.set_page_config(
     page_title="中医AI智能问诊助手",
     page_icon="🏥",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
+
+st.markdown("""
+<style>
+    .main-header {
+        background: linear-gradient(135deg, #1B5E20 0%, #2E7D32 50%, #388E3C 100%);
+        padding: 1.5rem 2rem;
+        border-radius: 12px;
+        color: white;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .main-header h1 {
+        color: white !important;
+        margin: 0;
+        font-size: 2rem;
+    }
+    .main-header p {
+        color: rgba(255,255,255,0.9);
+        margin: 0.5rem 0 0 0;
+        font-size: 1rem;
+    }
+    .metric-card {
+        background: white;
+        padding: 1rem;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        border-left: 4px solid #2E7D32;
+        transition: transform 0.2s;
+    }
+    .metric-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    }
+    .section-header {
+        background: #E8F5E9;
+        padding: 0.8rem 1.2rem;
+        border-radius: 8px;
+        border-left: 4px solid #2E7D32;
+        margin: 1rem 0;
+    }
+    .section-header h2, .section-header h3 {
+        color: #1B5E20 !important;
+        margin: 0;
+        font-size: 1.1rem;
+    }
+    .info-box {
+        background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%);
+        padding: 1rem;
+        border-radius: 8px;
+        border: 1px solid #A5D6A7;
+    }
+    .stButton>button {
+        border-radius: 8px;
+        font-weight: 600;
+        padding: 0.5rem 1.5rem;
+        transition: all 0.3s;
+    }
+    .stButton>button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    div[data-testid="stMetric"] {
+        background: white;
+        padding: 1rem;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        border: 1px solid #E8F5E9;
+    }
+    div[data-testid="stMetric"] label {
+        color: #2E7D32 !important;
+        font-weight: 600 !important;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 8px 8px 0 0;
+        padding: 0.5rem 1.5rem;
+        font-weight: 500;
+    }
+    .stTabs [aria-selected="true"] {
+        background: #2E7D32 !important;
+        color: white !important;
+    }
+    div[data-baseweb="tab-panel"] {
+        padding: 1rem 0;
+    }
+    .diagnosis-result {
+        background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%);
+        padding: 1.5rem;
+        border-radius: 12px;
+        border: 2px solid #A5D6A7;
+        margin: 1rem 0;
+    }
+    .herb-card {
+        background: white;
+        padding: 1rem;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        border: 1px solid #E8F5E9;
+        margin-bottom: 0.5rem;
+    }
+    .warning-box {
+        background: #FFF3E0;
+        border: 1px solid #FFE0B2;
+        border-radius: 8px;
+        padding: 0.8rem;
+        color: #E65100;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 DATA_DIR = "/tmp" if os.path.exists("/tmp") else "data"
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -62,8 +174,12 @@ def get_engine():
 def main():
     engine = get_engine()
 
-    st.title("🏥 中医AI智能问诊助手")
-    st.markdown("---")
+    st.markdown("""
+    <div class="main-header">
+        <h1>🏥 中医AI智能问诊助手</h1>
+        <p>基于 LLM + RAG 架构的中医智能问诊系统 | 支持六经/脏腑/气血津液辨证</p>
+    </div>
+    """, unsafe_allow_html=True)
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 智能问诊", "📊 数据分析", "📚 知识库", "🌿 中药库", "⚙️ 系统设置"])
 
@@ -79,7 +195,7 @@ def main():
         render_settings_tab()
 
 def render_consultation_tab(engine):
-    st.header("智能问诊")
+    st.markdown('<div class="section-header"><h2>📋 智能问诊</h2></div>', unsafe_allow_html=True)
 
     col1, col2 = st.columns([2, 3])
 
@@ -193,7 +309,7 @@ def render_consultation_tab(engine):
             st.info("👆 请填写左侧问诊信息，点击「开始诊断」查看结果")
 
 def render_analytics_tab():
-    st.header("数据分析看板")
+    st.markdown('<div class="section-header"><h2>📊 数据分析看板</h2></div>', unsafe_allow_html=True)
 
     records = load_records()
 
@@ -251,7 +367,7 @@ def render_analytics_tab():
     st.dataframe(df_list, use_container_width=True)
 
 def render_settings_tab():
-    st.header("系统设置")
+    st.markdown('<div class="section-header"><h2>⚙️ 系统设置</h2></div>', unsafe_allow_html=True)
 
     settings = load_settings()
 
@@ -323,7 +439,7 @@ def render_settings_tab():
         st.rerun()
 
 def render_knowledge_tab():
-    st.header("📚 中医知识库")
+    st.markdown('<div class="section-header"><h2>📚 中医知识库</h2></div>', unsafe_allow_html=True)
 
     tab1, tab2, tab3 = st.tabs(["方剂库", "证型库", "辨证体系"])
 
@@ -388,7 +504,7 @@ def render_knowledge_tab():
         """)
 
 def render_herb_tab():
-    st.header("🌿 中药库")
+    st.markdown('<div class="section-header"><h2>🌿 中药库</h2></div>', unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns(3)
     with col1:
