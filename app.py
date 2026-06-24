@@ -1,10 +1,10 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
-from datetime import datetime, timedelta
-import sys
+import json
 import os
+from datetime import datetime
+import sys
 
 sys.path.append(os.path.dirname(__file__))
 from utils.llm_engine import TCMDiagnosisEngine, API_PROVIDERS
@@ -15,13 +15,21 @@ st.set_page_config(
     layout="wide"
 )
 
-def init_session():
-    if "consultations" not in st.session_state:
-        st.session_state.consultations = []
-    if "last_result" not in st.session_state:
-        st.session_state.last_result = None
-    if "diagnosed" not in st.session_state:
-        st.session_state.diagnosed = False
+DATA_FILE = "/tmp/tcm_records.json" if os.path.exists("/tmp") else "data/tcm_records.json"
+
+def load_records():
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def save_records(records):
+    os.makedirs(os.path.dirname(DATA_FILE) if os.path.dirname(DATA_FILE) else ".", exist_ok=True)
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(records, f, ensure_ascii=False, indent=2)
 
 def get_engine():
     api_key = st.session_state.get("api_key", "")
@@ -34,7 +42,6 @@ def get_engine():
     return st.session_state.engine
 
 def main():
-    init_session()
     engine = get_engine()
 
     st.title("🏥 中医AI智能问诊助手")
@@ -44,16 +51,14 @@ def main():
 
     with tab1:
         render_consultation_tab(engine)
-
     with tab2:
         render_analytics_tab()
-
     with tab3:
-        render_knowledge_tab()
-
+        st.header("中医知识库")
+        st.info("📚 知识库功能开发中")
     with tab4:
-        render_herb_tab()
-
+        st.header("中药库")
+        st.info("🌿 中药库功能开发中")
     with tab5:
         render_settings_tab()
 
@@ -85,14 +90,18 @@ def render_consultation_tab(engine):
         tongue_sign = st.text_input("舌象", placeholder="如：舌苔薄白、舌质淡红")
         pulse_sign = st.text_input("脉象", placeholder="如：脉浮紧、脉弦细")
 
-        if st.button("🔍 开始诊断", type="primary", use_container_width=True):
+    with col2:
+        st.subheader("AI诊断结果")
+
+        diagnose_clicked = st.button("🔍 开始诊断", type="primary", use_container_width=True)
+
+        if diagnose_clicked:
             if not chief_complaint:
                 st.error("请输入主诉信息")
             else:
                 with st.spinner("AI正在分析中..."):
-                    result = engine.analyze_symptoms(
-                        chief_complaint, selected_symptoms, tongue_sign, pulse_sign
-                    )
+                    result = engine.analyze_symptoms(chief_complaint, selected_symptoms, tongue_sign, pulse_sign)
+
                 st.session_state.last_result = result
                 st.session_state.last_input = {
                     "name": patient_name or "匿名",
@@ -103,15 +112,10 @@ def render_consultation_tab(engine):
                     "tongue_sign": tongue_sign,
                     "pulse_sign": pulse_sign,
                 }
-                st.session_state.diagnosed = True
-                st.rerun()
 
-    with col2:
-        st.subheader("AI诊断结果")
-
-        if st.session_state.diagnosed and st.session_state.last_result:
+        if st.session_state.get("last_result"):
             result = st.session_state.last_result
-            inp = st.session_state.last_input
+            inp = st.session_state.get("last_input", {})
 
             if result["confidence"] > 0:
                 st.success("诊断完成！")
@@ -138,26 +142,23 @@ def render_consultation_tab(engine):
                 st.markdown("#### 方剂")
                 st.info(f"**{result['formula']}**")
                 if result.get("formula_adjustment") and result["formula_adjustment"] != "无":
-                    st.markdown("**加减建议**")
-                    st.warning(result["formula_adjustment"])
+                    st.warning(f"**加减建议**：{result['formula_adjustment']}")
 
             if result.get("additional_notes"):
                 st.markdown("#### 提示")
-                if result["confidence"] > 0:
-                    st.warning(result["additional_notes"])
-                else:
-                    st.error(result["additional_notes"])
+                st.warning(result["additional_notes"])
 
-            if st.button("💾 保存问诊记录", type="secondary"):
-                record = {
-                    "id": len(st.session_state.consultations) + 1,
-                    "name": inp["name"],
-                    "age": inp["age"],
-                    "gender": inp["gender"],
-                    "chief_complaint": inp["chief_complaint"],
-                    "symptoms": inp["symptoms"],
-                    "tongue_sign": inp["tongue_sign"],
-                    "pulse_sign": inp["pulse_sign"],
+            if st.button("💾 保存此问诊记录", type="secondary", key="save_btn"):
+                records = load_records()
+                new_record = {
+                    "id": len(records) + 1,
+                    "name": inp.get("name", "匿名"),
+                    "age": inp.get("age", 0),
+                    "gender": inp.get("gender", ""),
+                    "chief_complaint": inp.get("chief_complaint", ""),
+                    "symptoms": inp.get("symptoms", []),
+                    "tongue_sign": inp.get("tongue_sign", ""),
+                    "pulse_sign": inp.get("pulse_sign", ""),
                     "syndrome": result["syndrome"],
                     "syndrome_category": result.get("syndrome_category", ""),
                     "formula": result["formula"],
@@ -166,10 +167,11 @@ def render_consultation_tab(engine):
                     "treatment_principle": result.get("treatment_principle", ""),
                     "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }
-                st.session_state.consultations.append(record)
-                st.session_state.diagnosed = False
+                records.append(new_record)
+                save_records(records)
                 st.session_state.last_result = None
-                st.success("✅ 问诊记录已保存！切换到「📊 数据分析」查看")
+                st.session_state.last_input = None
+                st.success("✅ 问诊记录已保存！点击「📊 数据分析」查看")
                 st.rerun()
         else:
             st.info("👆 请填写左侧问诊信息，点击「开始诊断」查看结果")
@@ -177,73 +179,61 @@ def render_consultation_tab(engine):
 def render_analytics_tab():
     st.header("数据分析看板")
 
-    consultations = st.session_state.get("consultations", [])
+    records = load_records()
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("总问诊数", len(consultations))
+        st.metric("总问诊数", len(records))
     with col2:
-        valid = [c for c in consultations if c["confidence"] > 0]
+        valid = [r for r in records if r.get("confidence", 0) > 0]
         st.metric("有效诊断", len(valid))
     with col3:
-        avg_conf = sum(c["confidence"] for c in valid) / len(valid) if valid else 0
+        avg_conf = sum(r.get("confidence", 0) for r in valid) / len(valid) if valid else 0
         st.metric("平均置信度", f"{avg_conf:.1f}%")
     with col4:
-        if consultations:
-            st.metric("最新记录", consultations[-1]["date"][:10])
+        if records:
+            st.metric("最新记录", records[-1].get("date", "")[:10])
         else:
             st.metric("最新记录", "无")
 
     st.markdown("---")
 
-    if not consultations:
-        st.info("📊 暂无问诊记录。请先在「📋 智能问诊」中诊断并保存记录。")
+    if not records:
+        st.warning("📊 暂无问诊记录。请先在「📋 智能问诊」中诊断并保存记录。")
+        st.info("💡 保存后切换到此页面即可看到数据分析。")
         return
 
     col_left, col_right = st.columns(2)
 
     with col_left:
         st.subheader("证型分布")
-        syndromes = [c["syndrome"] for c in consultations if c["confidence"] > 0]
+        syndromes = [r["syndrome"] for r in records if r.get("confidence", 0) > 0]
         if syndromes:
-            df_syndrome = pd.DataFrame({"证型": syndromes}).value_counts().reset_index()
-            df_syndrome.columns = ["证型", "数量"]
-            fig = px.pie(df_syndrome, names="证型", values="数量", title="证型分布")
+            df = pd.DataFrame({"证型": syndromes}).value_counts().reset_index()
+            df.columns = ["证型", "数量"]
+            fig = px.pie(df, names="证型", values="数量")
             st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("暂无数据")
 
     with col_right:
         st.subheader("辨证体系分布")
-        categories = [c["syndrome_category"] for c in consultations if c["confidence"] > 0 and c["syndrome_category"]]
-        if categories:
-            df_cat = pd.DataFrame({"辨证体系": categories}).value_counts().reset_index()
-            df_cat.columns = ["辨证体系", "数量"]
-            fig = px.bar(df_cat, x="辨证体系", y="数量", title="辨证体系分布", color="辨证体系")
+        cats = [r.get("syndrome_category", "") for r in records if r.get("syndrome_category")]
+        if cats:
+            df = pd.DataFrame({"辨证体系": cats}).value_counts().reset_index()
+            df.columns = ["辨证体系", "数量"]
+            fig = px.bar(df, x="辨证体系", y="数量", color="辨证体系")
             st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("暂无数据")
 
     st.markdown("---")
-
     st.subheader("问诊记录列表")
-    df_records = pd.DataFrame([{
-        "日期": c["date"][:10],
-        "姓名": c["name"],
-        "主诉": c["chief_complaint"][:30] + "..." if len(c["chief_complaint"]) > 30 else c["chief_complaint"],
-        "证型": c["syndrome"],
-        "方剂": c["formula"],
-        "置信度": f"{c['confidence']}%"
-    } for c in reversed(consultations)])
-    st.dataframe(df_records, use_container_width=True)
-
-def render_knowledge_tab():
-    st.header("中医知识库")
-    st.info("📚 知识库功能开发中，敬请期待...")
-
-def render_herb_tab():
-    st.header("中药库")
-    st.info("🌿 中药库功能开发中，敬请期待...")
+    df_list = pd.DataFrame([{
+        "日期": r.get("date", "")[:10],
+        "姓名": r.get("name", ""),
+        "主诉": r.get("chief_complaint", "")[:25],
+        "证型": r.get("syndrome", ""),
+        "方剂": r.get("formula", ""),
+        "置信度": f"{r.get('confidence', 0)}%"
+    } for r in reversed(records)])
+    st.dataframe(df_list, use_container_width=True)
 
 def render_settings_tab():
     st.header("系统设置")
@@ -274,7 +264,6 @@ def render_settings_tab():
                 st.session_state.engine = TCMDiagnosisEngine(api_key, provider, model)
                 st.session_state.engine_key = f"{provider}:{api_key}"
                 st.success(f"✅ 已保存 {provider} / {model}")
-                st.rerun()
             else:
                 st.error("❌ 请输入有效的 API Key")
     with col2:
@@ -296,20 +285,20 @@ def render_settings_tab():
             st.session_state.engine = TCMDiagnosisEngine("")
             st.session_state.engine_key = ""
             st.info("已切换到演示模式")
-            st.rerun()
 
     st.markdown("---")
     st.subheader("当前状态")
     if current_key and len(current_key) > 5:
-        st.success(f"🔑 已配置 {provider} / {model}，AI 智能诊断已启用")
+        st.success(f"🔑 已配置 {provider} / {model}")
     else:
-        st.info("📋 演示模式（基于规则的诊断）")
+        st.info("📋 演示模式")
 
     st.markdown("---")
     st.subheader("数据管理")
-    st.info(f"📊 当前会话共 {len(st.session_state.get('consultations', []))} 条问诊记录")
-    if st.button("🗑️ 清空问诊记录"):
-        st.session_state.consultations = []
+    records = load_records()
+    st.info(f"📊 共 {len(records)} 条问诊记录")
+    if st.button("🗑️ 清空所有记录"):
+        save_records([])
         st.success("已清空")
         st.rerun()
 
