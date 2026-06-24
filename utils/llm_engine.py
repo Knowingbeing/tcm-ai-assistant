@@ -1,9 +1,16 @@
 import os
 from typing import List, Dict
-from openai import OpenAI
-from dotenv import load_dotenv
 
-load_dotenv()
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
 
 API_PROVIDERS = {
     "OpenAI": {
@@ -62,6 +69,8 @@ class TCMDiagnosisEngine:
 
         if self.has_api_key:
             try:
+                if OpenAI is None:
+                    raise ImportError("openai package not installed")
                 self.client = OpenAI(
                     api_key=api_key,
                     base_url=provider_config["base_url"]
