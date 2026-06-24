@@ -12,7 +12,7 @@ try:
 except Exception:
     pass
 
-DEFAULT_API_KEY = "sk-dacea21f5569497591fe69a15fc6bbe5"
+DEFAULT_API_KEY = ""
 DEFAULT_PROVIDER = "DeepSeek"
 
 API_PROVIDERS = {
