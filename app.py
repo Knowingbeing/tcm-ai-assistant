@@ -18,8 +18,10 @@ st.set_page_config(
 def init_session():
     if "consultations" not in st.session_state:
         st.session_state.consultations = []
-    if "patients" not in st.session_state:
-        st.session_state.patients = []
+    if "last_result" not in st.session_state:
+        st.session_state.last_result = None
+    if "diagnosed" not in st.session_state:
+        st.session_state.diagnosed = False
 
 def get_engine():
     api_key = st.session_state.get("api_key", "")
@@ -83,9 +85,6 @@ def render_consultation_tab(engine):
         tongue_sign = st.text_input("舌象", placeholder="如：舌苔薄白、舌质淡红")
         pulse_sign = st.text_input("脉象", placeholder="如：脉浮紧、脉弦细")
 
-    with col2:
-        st.subheader("AI诊断结果")
-
         if st.button("🔍 开始诊断", type="primary", use_container_width=True):
             if not chief_complaint:
                 st.error("请输入主诉信息")
@@ -94,62 +93,86 @@ def render_consultation_tab(engine):
                     result = engine.analyze_symptoms(
                         chief_complaint, selected_symptoms, tongue_sign, pulse_sign
                     )
+                st.session_state.last_result = result
+                st.session_state.last_input = {
+                    "name": patient_name or "匿名",
+                    "age": patient_age,
+                    "gender": patient_gender,
+                    "chief_complaint": chief_complaint,
+                    "symptoms": selected_symptoms,
+                    "tongue_sign": tongue_sign,
+                    "pulse_sign": pulse_sign,
+                }
+                st.session_state.diagnosed = True
+                st.rerun()
 
+    with col2:
+        st.subheader("AI诊断结果")
+
+        if st.session_state.diagnosed and st.session_state.last_result:
+            result = st.session_state.last_result
+            inp = st.session_state.last_input
+
+            if result["confidence"] > 0:
+                st.success("诊断完成！")
+            else:
+                st.error(f"诊断异常：{result['syndrome']}")
+
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.metric("诊断证型", result["syndrome"])
+                st.metric("辨证体系", result.get("syndrome_category", "待分类"))
+            with col_b:
+                st.metric("推荐方剂", result["formula"])
+                st.metric("置信度", f"{result['confidence']}%")
+
+            st.markdown("---")
+            st.markdown("#### 辨证分析")
+            st.info(result["analysis"])
+
+            if result.get("treatment_principle") and result["treatment_principle"] != "无":
+                st.markdown("#### 治疗原则")
+                st.info(result["treatment_principle"])
+
+            if result.get("formula") and result["formula"] not in ["无", "待推荐"]:
+                st.markdown("#### 方剂")
+                st.info(f"**{result['formula']}**")
+                if result.get("formula_adjustment") and result["formula_adjustment"] != "无":
+                    st.markdown("**加减建议**")
+                    st.warning(result["formula_adjustment"])
+
+            if result.get("additional_notes"):
+                st.markdown("#### 提示")
                 if result["confidence"] > 0:
-                    st.success("诊断完成！")
+                    st.warning(result["additional_notes"])
                 else:
-                    st.error(f"诊断异常：{result['syndrome']}")
+                    st.error(result["additional_notes"])
 
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    st.metric("诊断证型", result["syndrome"])
-                    st.metric("辨证体系", result.get("syndrome_category", "待分类"))
-                with col_b:
-                    st.metric("推荐方剂", result["formula"])
-                    st.metric("置信度", f"{result['confidence']}%")
-
-                st.markdown("---")
-                st.markdown("#### 辨证分析")
-                st.info(result["analysis"])
-
-                if result.get("treatment_principle") and result["treatment_principle"] != "无":
-                    st.markdown("#### 治疗原则")
-                    st.info(result["treatment_principle"])
-
-                if result.get("formula") and result["formula"] not in ["无", "待推荐"]:
-                    st.markdown("#### 方剂")
-                    st.info(f"**{result['formula']}**")
-                    if result.get("formula_adjustment") and result["formula_adjustment"] != "无":
-                        st.markdown("**加减建议**")
-                        st.warning(result["formula_adjustment"])
-
-                if result.get("additional_notes"):
-                    st.markdown("#### 提示")
-                    if result["confidence"] > 0:
-                        st.warning(result["additional_notes"])
-                    else:
-                        st.error(result["additional_notes"])
-
-                if st.button("💾 保存问诊记录"):
-                    record = {
-                        "id": len(st.session_state.consultations) + 1,
-                        "name": patient_name or "匿名",
-                        "age": patient_age,
-                        "gender": patient_gender,
-                        "chief_complaint": chief_complaint,
-                        "symptoms": selected_symptoms,
-                        "tongue_sign": tongue_sign,
-                        "pulse_sign": pulse_sign,
-                        "syndrome": result["syndrome"],
-                        "syndrome_category": result.get("syndrome_category", ""),
-                        "formula": result["formula"],
-                        "confidence": result["confidence"],
-                        "analysis": result["analysis"],
-                        "treatment_principle": result.get("treatment_principle", ""),
-                        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    }
-                    st.session_state.consultations.append(record)
-                    st.success("✅ 问诊记录已保存！切换到「📊 数据分析」查看")
+            if st.button("💾 保存问诊记录", type="secondary"):
+                record = {
+                    "id": len(st.session_state.consultations) + 1,
+                    "name": inp["name"],
+                    "age": inp["age"],
+                    "gender": inp["gender"],
+                    "chief_complaint": inp["chief_complaint"],
+                    "symptoms": inp["symptoms"],
+                    "tongue_sign": inp["tongue_sign"],
+                    "pulse_sign": inp["pulse_sign"],
+                    "syndrome": result["syndrome"],
+                    "syndrome_category": result.get("syndrome_category", ""),
+                    "formula": result["formula"],
+                    "confidence": result["confidence"],
+                    "analysis": result["analysis"],
+                    "treatment_principle": result.get("treatment_principle", ""),
+                    "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                }
+                st.session_state.consultations.append(record)
+                st.session_state.diagnosed = False
+                st.session_state.last_result = None
+                st.success("✅ 问诊记录已保存！切换到「📊 数据分析」查看")
+                st.rerun()
+        else:
+            st.info("👆 请填写左侧问诊信息，点击「开始诊断」查看结果")
 
 def render_analytics_tab():
     st.header("数据分析看板")
