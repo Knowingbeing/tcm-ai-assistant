@@ -275,14 +275,32 @@ class TCMDiagnosisEngine:
         except Exception as e:
             error_msg = str(e)
             if "401" in error_msg or "invalid_api_key" in error_msg.lower():
-                return {"syndrome": "诊断失败", "syndrome_category": "错误",
-                        "analysis": f"API Key 无效，请检查后重试。",
+                return {"syndrome": "API Key 无效", "syndrome_category": "配置错误",
+                        "analysis": "你输入的 API Key 无效或已过期。",
                         "formula": "无", "formula_adjustment": "无",
                         "treatment_principle": "无", "confidence": 0,
-                        "additional_notes": f"错误：API Key 验证失败。请前往「系统设置」检查配置。"}
+                        "additional_notes": "🔑 请检查 API Key 是否正确，或前往厂商官网重新获取。"}
+            elif "404" in error_msg or "model" in error_msg.lower():
+                return {"syndrome": "模型不存在", "syndrome_category": "配置错误",
+                        "analysis": f"选择的模型 '{self.model}' 不存在或不可用。",
+                        "formula": "无", "formula_adjustment": "无",
+                        "treatment_principle": "无", "confidence": 0,
+                        "additional_notes": "🤖 请在设置中选择其他模型，或检查厂商是否支持该模型。"}
+            elif "429" in error_msg or "rate" in error_msg.lower():
+                return {"syndrome": "请求频率超限", "syndrome_category": "限流",
+                        "analysis": "API 请求过于频繁，请稍后重试。",
+                        "formula": "无", "formula_adjustment": "无",
+                        "treatment_principle": "无", "confidence": 0,
+                        "additional_notes": "⏳ 请等待 30 秒后重试，或升级 API 套餐。"}
+            elif "connection" in error_msg.lower() or "timeout" in error_msg.lower() or "connect" in error_msg.lower():
+                return {"syndrome": "网络连接失败", "syndrome_category": "网络错误",
+                        "analysis": f"无法连接到 {self.provider} 的 API 服务器。",
+                        "formula": "无", "formula_adjustment": "无",
+                        "treatment_principle": "无", "confidence": 0,
+                        "additional_notes": f"🌐 请检查：\n1. 网络是否正常\n2. API 地址是否正确\n3. 当前网络是否能访问 {self.provider} 服务"}
             else:
-                return {"syndrome": "诊断失败", "syndrome_category": "错误",
-                        "analysis": f"AI 分析失败：{error_msg[:200]}",
+                return {"syndrome": "诊断失败", "syndrome_category": "未知错误",
+                        "analysis": f"AI 分析时发生错误：{error_msg[:300]}",
                         "formula": "无", "formula_adjustment": "无",
                         "treatment_principle": "无", "confidence": 0,
-                        "additional_notes": "请检查网络连接或稍后重试。"}
+                        "additional_notes": "请截图此错误信息并联系开发者，或尝试切换其他 API 厂商。"}

@@ -95,7 +95,10 @@ def render_consultation_tab(engine):
                         chief_complaint, selected_symptoms, tongue_sign, pulse_sign
                     )
 
-                st.success("诊断完成！")
+                if result["confidence"] > 0:
+                    st.success("诊断完成！")
+                else:
+                    st.error(f"诊断异常：{result['syndrome']}")
 
                 col_a, col_b = st.columns(2)
                 with col_a:
@@ -109,18 +112,23 @@ def render_consultation_tab(engine):
                 st.markdown("#### 辨证分析")
                 st.info(result["analysis"])
 
-                st.markdown("#### 治疗原则")
-                st.info(result.get("treatment_principle", "待确定"))
+                if result.get("treatment_principle") and result["treatment_principle"] != "无":
+                    st.markdown("#### 治疗原则")
+                    st.info(result["treatment_principle"])
 
-                st.markdown("#### 方剂")
-                st.info(f"**{result['formula']}**")
-                if result.get("formula_adjustment"):
-                    st.markdown("**加减建议**")
-                    st.warning(result["formula_adjustment"])
+                if result.get("formula") and result["formula"] not in ["无", "待推荐"]:
+                    st.markdown("#### 方剂")
+                    st.info(f"**{result['formula']}**")
+                    if result.get("formula_adjustment") and result["formula_adjustment"] != "无":
+                        st.markdown("**加减建议**")
+                        st.warning(result["formula_adjustment"])
 
                 if result.get("additional_notes"):
-                    st.markdown("#### 注意事项")
-                    st.warning(result["additional_notes"])
+                    st.markdown("#### 提示")
+                    if result["confidence"] > 0:
+                        st.warning(result["additional_notes"])
+                    else:
+                        st.error(result["additional_notes"])
 
                 if st.button("💾 保存问诊记录"):
                     save_consultation(patient_name, patient_age, patient_gender,
