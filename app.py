@@ -7,7 +7,7 @@ from datetime import datetime
 import sys
 
 sys.path.append(os.path.dirname(__file__))
-from utils.llm_engine import TCMDiagnosisEngine, API_PROVIDERS
+from utils.llm_engine import TCMDiagnosisEngine, API_PROVIDERS, DEFAULT_API_KEY, DEFAULT_PROVIDER
 
 st.set_page_config(
     page_title="中医AI智能问诊助手",
@@ -15,26 +15,43 @@ st.set_page_config(
     layout="wide"
 )
 
-DATA_FILE = "/tmp/tcm_records.json" if os.path.exists("/tmp") else "data/tcm_records.json"
+DATA_DIR = "/tmp" if os.path.exists("/tmp") else "data"
+os.makedirs(DATA_DIR, exist_ok=True)
+RECORDS_FILE = os.path.join(DATA_DIR, "tcm_records.json")
+SETTINGS_FILE = os.path.join(DATA_DIR, "tcm_settings.json")
 
 def load_records():
-    if os.path.exists(DATA_FILE):
+    if os.path.exists(RECORDS_FILE):
         try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
+            with open(RECORDS_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except:
             return []
     return []
 
 def save_records(records):
-    os.makedirs(os.path.dirname(DATA_FILE) if os.path.dirname(DATA_FILE) else ".", exist_ok=True)
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
+    with open(RECORDS_FILE, "w", encoding="utf-8") as f:
         json.dump(records, f, ensure_ascii=False, indent=2)
 
+def load_settings():
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            pass
+    return {"api_key": DEFAULT_API_KEY, "provider": DEFAULT_PROVIDER, "model": ""}
+
+def save_settings(settings):
+    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(settings, f, ensure_ascii=False, indent=2)
+
 def get_engine():
-    api_key = st.session_state.get("api_key", "")
-    provider = st.session_state.get("api_provider", "OpenAI")
-    model = st.session_state.get("api_model", "")
+    settings = load_settings()
+    api_key = settings.get("api_key", DEFAULT_API_KEY)
+    provider = settings.get("provider", DEFAULT_PROVIDER)
+    model = settings.get("model", "")
+
     engine_key = f"{provider}:{api_key}"
     if "engine" not in st.session_state or st.session_state.get("engine_key") != engine_key:
         st.session_state.engine = TCMDiagnosisEngine(api_key, provider, model)
@@ -200,7 +217,6 @@ def render_analytics_tab():
 
     if not records:
         st.warning("📊 暂无问诊记录。请先在「📋 智能问诊」中诊断并保存记录。")
-        st.info("💡 保存后切换到此页面即可看到数据分析。")
         return
 
     col_left, col_right = st.columns(2)
@@ -238,60 +254,65 @@ def render_analytics_tab():
 def render_settings_tab():
     st.header("系统设置")
 
+    settings = load_settings()
+
     st.subheader("API配置")
+
+    provider_list = list(API_PROVIDERS.keys())
+    current_provider = settings.get("provider", DEFAULT_PROVIDER)
+    provider_idx = provider_list.index(current_provider) if current_provider in provider_list else 0
 
     col1, col2 = st.columns(2)
     with col1:
-        provider = st.selectbox("选择 API 厂商", list(API_PROVIDERS.keys()),
-                               index=list(API_PROVIDERS.keys()).index(st.session_state.get("api_provider", "OpenAI")))
+        provider = st.selectbox("选择 API 厂商", provider_list, index=provider_idx)
     with col2:
         provider_config = API_PROVIDERS[provider]
-        model = st.selectbox("选择模型", provider_config["models"],
-                            index=provider_config["models"].index(provider_config["default_model"]) if provider_config["default_model"] in provider_config["models"] else 0)
+        models = provider_config["models"]
+        current_model = settings.get("model", "") or provider_config["default_model"]
+        model_idx = models.index(current_model) if current_model in models else 0
+        model = st.selectbox("选择模型", models, index=model_idx)
 
     st.caption(f"📡 API 地址：{provider_config['base_url']}")
 
-    current_key = st.session_state.get("api_key", "")
-    api_key = st.text_input("API Key", type="password", placeholder="输入你的 API Key...", value=current_key)
+    current_key = settings.get("api_key", "")
+    api_key = st.text_input("API Key", type="password", placeholder="输入你的 API Key（留空使用默认）", value=current_key if current_key != DEFAULT_API_KEY else "")
 
     col1, col2, col3 = st.columns(3)
     with col1:
         if st.button("💾 保存配置", type="primary"):
-            if api_key and len(api_key) > 5:
-                st.session_state.api_key = api_key
-                st.session_state.api_provider = provider
-                st.session_state.api_model = model
-                st.session_state.engine = TCMDiagnosisEngine(api_key, provider, model)
-                st.session_state.engine_key = f"{provider}:{api_key}"
-                st.success(f"✅ 已保存 {provider} / {model}")
-            else:
-                st.error("❌ 请输入有效的 API Key")
+            new_key = api_key if api_key and len(api_key) > 5 else DEFAULT_API_KEY
+            new_settings = {
+                "api_key": new_key,
+                "provider": provider,
+                "model": model
+            }
+            save_settings(new_settings)
+            st.session_state.engine = TCMDiagnosisEngine(new_key, provider, model)
+            st.session_state.engine_key = f"{provider}:{new_key}"
+            st.success(f"✅ 配置已保存：{provider} / {model}")
+            st.rerun()
     with col2:
         if st.button("🧪 测试连接"):
-            if api_key and len(api_key) > 5:
-                with st.spinner("测试中..."):
-                    test_engine = TCMDiagnosisEngine(api_key, provider, model)
-                    result = test_engine.analyze_symptoms("测试", [], "", "")
-                    if result.get("confidence", 0) > 0 or "失败" not in result.get("syndrome", ""):
-                        st.success("✅ 连接成功！")
-                    else:
-                        st.error(f"❌ {result.get('additional_notes', '连接失败')}")
-            else:
-                st.error("❌ 请先输入 API Key")
+            test_key = api_key if api_key and len(api_key) > 5 else DEFAULT_API_KEY
+            with st.spinner("测试中..."):
+                test_engine = TCMDiagnosisEngine(test_key, provider, model)
+                result = test_engine.analyze_symptoms("测试", [], "", "")
+                if result.get("confidence", 0) > 0 or "失败" not in result.get("syndrome", ""):
+                    st.success("✅ 连接成功！")
+                else:
+                    st.error(f"❌ {result.get('additional_notes', '连接失败')}")
     with col3:
-        if st.button("🗑️ 清除配置"):
-            st.session_state.api_key = ""
-            st.session_state.api_provider = "OpenAI"
-            st.session_state.engine = TCMDiagnosisEngine("")
-            st.session_state.engine_key = ""
-            st.info("已切换到演示模式")
+        if st.button("🔄 恢复默认"):
+            save_settings({"api_key": DEFAULT_API_KEY, "provider": DEFAULT_PROVIDER, "model": ""})
+            st.session_state.engine = TCMDiagnosisEngine()
+            st.session_state.engine_key = f"{DEFAULT_PROVIDER}:{DEFAULT_API_KEY}"
+            st.success("✅ 已恢复默认配置")
+            st.rerun()
 
     st.markdown("---")
     st.subheader("当前状态")
-    if current_key and len(current_key) > 5:
-        st.success(f"🔑 已配置 {provider} / {model}")
-    else:
-        st.info("📋 演示模式")
+    st.success(f"🔑 当前使用：{settings.get('provider', DEFAULT_PROVIDER)} / {settings.get('model', '默认模型')}")
+    st.caption("默认配置使用 DeepSeek API，其他用户无需配置即可使用")
 
     st.markdown("---")
     st.subheader("数据管理")

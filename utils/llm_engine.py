@@ -12,17 +12,20 @@ try:
 except Exception:
     pass
 
+DEFAULT_API_KEY = "sk-dacea21f5569497591fe69a15fc6bbe5"
+DEFAULT_PROVIDER = "DeepSeek"
+
 API_PROVIDERS = {
-    "OpenAI": {
-        "base_url": "https://api.openai.com/v1",
-        "models": ["gpt-3.5-turbo", "gpt-4", "gpt-4o"],
-        "default_model": "gpt-3.5-turbo",
-        "key_prefix": "sk-",
-    },
     "DeepSeek": {
         "base_url": "https://api.deepseek.com/v1",
         "models": ["deepseek-chat", "deepseek-coder"],
         "default_model": "deepseek-chat",
+        "key_prefix": "sk-",
+    },
+    "OpenAI": {
+        "base_url": "https://api.openai.com/v1",
+        "models": ["gpt-3.5-turbo", "gpt-4", "gpt-4o"],
+        "default_model": "gpt-3.5-turbo",
         "key_prefix": "sk-",
     },
     "MiMo (小米)": {
@@ -58,12 +61,14 @@ API_PROVIDERS = {
 }
 
 class TCMDiagnosisEngine:
-    def __init__(self, api_key: str = "", provider: str = "OpenAI", model: str = ""):
-        self.provider = provider
-        provider_config = API_PROVIDERS.get(provider, API_PROVIDERS["OpenAI"])
-
+    def __init__(self, api_key: str = "", provider: str = "", model: str = ""):
+        if not provider:
+            provider = DEFAULT_PROVIDER
         if not api_key:
-            api_key = os.getenv("OPENAI_API_KEY", "")
+            api_key = DEFAULT_API_KEY
+
+        self.provider = provider
+        provider_config = API_PROVIDERS.get(provider, API_PROVIDERS[DEFAULT_PROVIDER])
 
         self.has_api_key = bool(api_key) and len(api_key) > 5
 
