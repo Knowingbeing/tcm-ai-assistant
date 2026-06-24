@@ -646,70 +646,116 @@ def render_knowledge_tab():
 
     with tab1:
         st.markdown('<div class="section-container">', unsafe_allow_html=True)
-        st.markdown("**常用方剂**")
-        categories = list(set(f["category"] for f in FORMULAS))
-        category_filter = st.selectbox("按类别筛选", ["全部"] + sorted(categories))
 
-        filtered = FORMULAS if category_filter == "全部" else [f for f in FORMULAS if f["category"] == category_filter]
+        col1, col2, col3 = st.columns([2, 1, 1])
+        with col1:
+            search_formula = st.text_input("🔍 搜索方剂", placeholder="输入方剂名称...", key="formula_search", label_visibility="collapsed")
+        with col2:
+            categories = list(set(f["category"] for f in FORMULAS))
+            category_filter = st.selectbox("按类别", ["全部"] + sorted(categories), key="formula_category")
+        with col3:
+            sources = list(set(f["source"] for f in FORMULAS))
+            source_filter = st.selectbox("按来源", ["全部"] + sorted(sources), key="formula_source")
+
+        filtered = FORMULAS
+        if search_formula:
+            filtered = [f for f in filtered if search_formula in f["name"] or search_formula in f["composition"]]
+        if category_filter != "全部":
+            filtered = [f for f in filtered if f["category"] == category_filter]
+        if source_filter != "全部":
+            filtered = [f for f in filtered if f["source"] == source_filter]
+
+        st.markdown(f"共找到 **{len(filtered)}** 个方剂")
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
         for f in filtered:
-            with st.expander(f"📜 {f['name']} [{f['category']}] - {f['source']}"):
+            with st.expander(f"📜 **{f['name']}** [{f['category']}] - {f['source']}"):
                 col_a, col_b = st.columns([1, 1])
                 with col_a:
-                    st.markdown(f"**组成**：{f['composition']}")
-                    st.markdown(f"**功效**：{f['function']}")
+                    st.markdown(f"**💊 组成**：{f['composition']}")
+                    st.markdown(f"**🎯 功效**：{f['function']}")
                 with col_b:
-                    st.markdown(f"**主治**：{f['indication']}")
-                    st.markdown(f"**来源**：{f['source']}")
+                    st.markdown(f"**📋 主治**：{f['indication']}")
+                    st.markdown(f"**📖 来源**：{f['source']}")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with tab2:
         st.markdown('<div class="section-container">', unsafe_allow_html=True)
-        st.markdown("**证型分类**")
-        categories = list(set(s["category"] for s in SYNDROMES))
-        category_filter = st.selectbox("按辨证体系筛选", ["全部"] + sorted(categories), key="syndrome_filter")
 
-        filtered = SYNDROMES if category_filter == "全部" else [s for s in SYNDROMES if s["category"] == category_filter]
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            search_syndrome = st.text_input("🔍 搜索证型", placeholder="输入证型名称或症状...", key="syndrome_search", label_visibility="collapsed")
+        with col2:
+            categories = list(set(s["category"] for s in SYNDROMES))
+            category_filter = st.selectbox("按辨证体系", ["全部"] + sorted(categories), key="syndrome_category")
+
+        filtered = SYNDROMES
+        if search_syndrome:
+            filtered = [s for s in filtered if search_syndrome in s["name"] or search_syndrome in s["symptoms"]]
+        if category_filter != "全部":
+            filtered = [s for s in filtered if s["category"] == category_filter]
+
+        st.markdown(f"共找到 **{len(filtered)}** 个证型")
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
         for s in filtered:
-            with st.expander(f"🩺 {s['name']} [{s['category']}]"):
+            with st.expander(f"🩺 **{s['name']}** [{s['category']}]"):
                 col_a, col_b = st.columns([1, 1])
                 with col_a:
-                    st.markdown(f"**主要症状**：{s['symptoms']}")
-                    st.markdown(f"**舌象**：{s['tongue']}")
-                    st.markdown(f"**脉象**：{s['pulse']}")
+                    st.markdown(f"**🔍 主要症状**：{s['symptoms']}")
+                    st.markdown(f"**👅 舌象**：{s['tongue']}")
+                    st.markdown(f"**🤚 脉象**：{s['pulse']}")
                 with col_b:
-                    st.markdown(f"**推荐方剂**：{s['formula']}")
-                    st.markdown(f"**治法**：{s['treatment']}")
+                    st.markdown(f"**💊 推荐方剂**：{s['formula']}")
+                    st.markdown(f"**🎯 治法**：{s['treatment']}")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with tab3:
         st.markdown('<div class="section-container">', unsafe_allow_html=True)
-        st.markdown("**辨证体系说明**")
+        st.markdown("**📖 辨证体系说明**")
         st.markdown("""
         ### 🔄 六经辨证（《伤寒论》）
-        | 经络 | 证型 | 主要表现 | 代表方剂 |
-        |------|------|----------|----------|
-        | 太阳 | 表证 | 恶寒发热、头痛身痛 | 麻黄汤、桂枝汤 |
-        | 阳明 | 里实热证 | 但热不寒、大汗大渴 | 白虎汤、承气汤 |
-        | 少阳 | 半表半里证 | 往来寒热、口苦咽干 | 小柴胡汤 |
-        | 太阴 | 里虚寒证 | 腹满吐利、喜温喜按 | 理中丸 |
-        | 少阴 | 心肾虚证 | 畏寒蜷卧或心烦不得眠 | 四逆汤、黄连阿胶汤 |
-        | 厥阴 | 寒热错杂 | 消渴、气上撞心 | 乌梅丸 |
+
+        六经辨证是《伤寒论》的核心辨证体系，将外感热病分为六个阶段：
+
+        | 经络 | 证型 | 主要表现 | 代表方剂 | 病机 |
+        |------|------|----------|----------|------|
+        | 太阳 | 表证 | 恶寒发热、头痛身痛 | 麻黄汤、桂枝汤 | 风寒袭表 |
+        | 阳明 | 里实热证 | 但热不寒、大汗大渴 | 白虎汤、承气汤 | 里热炽盛 |
+        | 少阳 | 半表半里证 | 往来寒热、口苦咽干 | 小柴胡汤 | 枢机不利 |
+        | 太阴 | 里虚寒证 | 腹满吐利、喜温喜按 | 理中丸 | 脾阳不振 |
+        | 少阴 | 心肾虚证 | 畏寒蜷卧或心烦不得眠 | 四逆汤、黄连阿胶汤 | 心肾阳虚/阴虚 |
+        | 厥阴 | 寒热错杂 | 消渴、气上撞心 | 乌梅丸 | 阴阳对峙 |
 
         ### 🏥 脏腑辨证
+
+        脏腑辨证是根据脏腑的生理功能和病理特点，对疾病进行辨证的方法：
+
         - **心系**：心气虚、心血虚、心火亢盛、心血瘀阻
         - **肝系**：肝气郁结、肝火上炎、肝血虚、肝阳上亢
-        - **脾系**：脾气虚、脾阳虚、脾不统血、寒湿困脾
-        - **肺系**：肺气虚、肺阴虚、风寒犯肺、风热犯肺
+        - **脾系**：脾气虚、脾阳虚、脾不统血、寒湿困脾、湿热蕴脾
+        - **肺系**：肺气虚、肺阴虚、风寒犯肺、风热犯肺、痰热壅肺
         - **肾系**：肾阳虚、肾阴虚、肾精不足、肾不纳气
 
         ### 🩸 气血津液辨证
+
         - **气病**：气虚、气陷、气滞、气逆
         - **血病**：血虚、血瘀、血热、血寒
         - **津液病**：痰证、饮证、津亏证
 
+        ### 🌡️ 卫气营血辨证（温病学）
+
+        卫气营血辨证是温病学的核心辨证体系：
+
+        | 分期 | 病位 | 主要表现 | 治法 | 代表方剂 |
+        |------|------|----------|------|----------|
+        | 卫分 | 肌表 | 发热微恶风寒 | 辛凉解表 | 银翘散 |
+        | 气分 | 脏腑 | 壮热不恶寒 | 清气泄热 | 白虎汤 |
+        | 营分 | 营阴 | 身热夜甚、心烦 | 清营透热 | 清营汤 |
+        | 血分 | 血分 | 出血、发斑 | 凉血散血 | 犀角地黄汤 |
+
         ### 📝 辨证论治流程
+
         1. **四诊合参**：望、闻、问、切收集病情资料
         2. **八纲辨证**：确定表里、寒热、虚实、阴阳
         3. **脏腑辨证**：定位到具体脏腑
@@ -729,15 +775,18 @@ def render_herb_tab():
     </div>
     """, unsafe_allow_html=True)
 
-    col1, col2, col3 = st.columns([2, 1, 1])
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
     with col1:
         search = st.text_input("🔍 搜索中药", placeholder="输入药名搜索...", label_visibility="collapsed")
     with col2:
-        natures = list(set(h["nature"] for h in HERBS))
-        nature_filter = st.selectbox("药性", ["全部"] + sorted(natures))
+        natures = sorted(list(set(h["nature"] for h in HERBS)))
+        nature_filter = st.selectbox("药性", ["全部"] + natures)
     with col3:
-        flavors = list(set(h["flavor"] for h in HERBS))
-        flavor_filter = st.selectbox("药味", ["全部"] + sorted(flavors))
+        flavors = sorted(list(set(h["flavor"] for h in HERBS)))
+        flavor_filter = st.selectbox("药味", ["全部"] + flavors)
+    with col4:
+        meridians = sorted(list(set(h["meridian"] for h in HERBS)))
+        meridian_filter = st.selectbox("归经", ["全部"] + meridians)
 
     filtered = HERBS
     if search:
@@ -746,21 +795,23 @@ def render_herb_tab():
         filtered = [h for h in filtered if h["nature"] == nature_filter]
     if flavor_filter != "全部":
         filtered = [h for h in filtered if flavor_filter in h["flavor"]]
+    if meridian_filter != "全部":
+        filtered = [h for h in filtered if meridian_filter in h["meridian"]]
 
     st.markdown(f"共找到 **{len(filtered)}** 味中药")
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
     for h in filtered:
-        with st.expander(f"🌿 {h['name']} - {h['nature']}性 {h['flavor']}味"):
+        with st.expander(f"🌿 **{h['name']}** - {h['nature']}性 {h['flavor']}味 | {h['meridian']}"):
             col_a, col_b = st.columns([1, 1])
             with col_a:
-                st.markdown(f"**药性**：{h['nature']}")
-                st.markdown(f"**药味**：{h['flavor']}")
-                st.markdown(f"**归经**：{h['meridian']}")
-                st.markdown(f"**用量**：{h['dosage']}")
+                st.markdown(f"**🌡️ 药性**：{h['nature']}")
+                st.markdown(f"**👅 药味**：{h['flavor']}")
+                st.markdown(f"**📍 归经**：{h['meridian']}")
+                st.markdown(f"**📏 用量**：{h['dosage']}")
             with col_b:
-                st.markdown(f"**功效**：{h['function']}")
-                st.markdown(f"**主治**：{h['indication']}")
+                st.markdown(f"**🎯 功效**：{h['function']}")
+                st.markdown(f"**📋 主治**：{h['indication']}")
             if h.get("caution"):
                 st.warning(f"**⚠️ 禁忌**：{h['caution']}")
 
