@@ -8,6 +8,7 @@ import sys
 
 sys.path.append(os.path.dirname(__file__))
 from utils.llm_engine import TCMDiagnosisEngine, API_PROVIDERS, DEFAULT_API_KEY, DEFAULT_PROVIDER
+from data.tcm_data import FORMULAS, SYNDROMES, HERBS
 
 st.set_page_config(
     page_title="中医AI智能问诊助手",
@@ -71,11 +72,9 @@ def main():
     with tab2:
         render_analytics_tab()
     with tab3:
-        st.header("中医知识库")
-        st.info("📚 知识库功能开发中")
+        render_knowledge_tab()
     with tab4:
-        st.header("中药库")
-        st.info("🌿 中药库功能开发中")
+        render_herb_tab()
     with tab5:
         render_settings_tab()
 
@@ -322,6 +321,108 @@ def render_settings_tab():
         save_records([])
         st.success("已清空")
         st.rerun()
+
+def render_knowledge_tab():
+    st.header("📚 中医知识库")
+
+    tab1, tab2, tab3 = st.tabs(["方剂库", "证型库", "辨证体系"])
+
+    with tab1:
+        st.subheader("常用方剂")
+        categories = list(set(f["category"] for f in FORMULAS))
+        category_filter = st.selectbox("按类别筛选", ["全部"] + sorted(categories))
+
+        filtered = FORMULAS if category_filter == "全部" else [f for f in FORMULAS if f["category"] == category_filter]
+
+        for f in filtered:
+            with st.expander(f"📜 {f['name']} [{f['category']}] - {f['source']}"):
+                st.write(f"**组成**：{f['composition']}")
+                st.write(f"**功效**：{f['function']}")
+                st.write(f"**主治**：{f['indication']}")
+
+    with tab2:
+        st.subheader("证型分类")
+        categories = list(set(s["category"] for s in SYNDROMES))
+        category_filter = st.selectbox("按辨证体系筛选", ["全部"] + sorted(categories), key="syndrome_filter")
+
+        filtered = SYNDROMES if category_filter == "全部" else [s for s in SYNDROMES if s["category"] == category_filter]
+
+        for s in filtered:
+            with st.expander(f"🩺 {s['name']} [{s['category']}]"):
+                st.write(f"**主要症状**：{s['symptoms']}")
+                st.write(f"**舌象**：{s['tongue']}")
+                st.write(f"**脉象**：{s['pulse']}")
+                st.write(f"**推荐方剂**：{s['formula']}")
+                st.write(f"**治法**：{s['treatment']}")
+
+    with tab3:
+        st.subheader("辨证体系说明")
+        st.markdown("""
+        ### 六经辨证（《伤寒论》）
+        - **太阳病**：表证，恶寒发热同时出现
+        - **阳明病**：里实热证，但热不寒
+        - **少阳病**：半表半里证，往来寒热
+        - **太阴病**：里虚寒证，腹满吐利
+        - **少阴病**：心肾阳虚或阴虚
+        - **厥阴病**：寒热错杂，上热下寒
+
+        ### 脏腑辨证
+        - **心系**：心气虚、心血虚、心火亢盛、心血瘀阻
+        - **肝系**：肝气郁结、肝火上炎、肝血虚、肝阳上亢
+        - **脾系**：脾气虚、脾阳虚、脾不统血、寒湿困脾
+        - **肺系**：肺气虚、肺阴虚、风寒犯肺、风热犯肺
+        - **肾系**：肾阳虚、肾阴虚、肾精不足、肾不纳气
+
+        ### 气血津液辨证
+        - **气病**：气虚、气陷、气滞、气逆
+        - **血病**：血虚、血瘀、血热、血寒
+        - **津液病**：痰证、饮证、津亏证
+
+        ### 辨证论治流程
+        1. 四诊合参：望、闻、问、切
+        2. 八纲辨证：表里、寒热、虚实、阴阳
+        3. 脏腑辨证：定位到具体脏腑
+        4. 确定证型：综合判断
+        5. 确定治法：根据证型确定治疗原则
+        6. 选方用药：根据治法选择方剂
+        """)
+
+def render_herb_tab():
+    st.header("🌿 中药库")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        search = st.text_input("🔍 搜索中药", placeholder="输入药名")
+    with col2:
+        natures = list(set(h["nature"] for h in HERBS))
+        nature_filter = st.selectbox("按药性", ["全部"] + sorted(natures))
+    with col3:
+        flavors = list(set(h["flavor"] for h in HERBS))
+        flavor_filter = st.selectbox("按药味", ["全部"] + sorted(flavors))
+
+    filtered = HERBS
+    if search:
+        filtered = [h for h in filtered if search in h["name"]]
+    if nature_filter != "全部":
+        filtered = [h for h in filtered if h["nature"] == nature_filter]
+    if flavor_filter != "全部":
+        filtered = [h for h in filtered if flavor_filter in h["flavor"]]
+
+    st.info(f"共找到 **{len(filtered)}** 味中药")
+
+    for h in filtered:
+        with st.expander(f"🌿 {h['name']} - {h['nature']}性 {h['flavor']}味"):
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.write(f"**药性**：{h['nature']}")
+                st.write(f"**药味**：{h['flavor']}")
+                st.write(f"**归经**：{h['meridian']}")
+            with col_b:
+                st.write(f"**功效**：{h['function']}")
+                st.write(f"**主治**：{h['indication']}")
+                st.write(f"**用量**：{h['dosage']}")
+            if h.get("caution"):
+                st.warning(f"**禁忌**：{h['caution']}")
 
 if __name__ == "__main__":
     main()
