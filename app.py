@@ -382,6 +382,8 @@ def get_engine():
 
 def main():
     engine = get_engine()
+    settings = load_settings()
+    has_api_key = bool(settings.get("api_key", ""))
 
     st.markdown("""
     <div class="hero-section">
@@ -390,6 +392,9 @@ def main():
         <span class="badge">✨ 支持六经辨证 · 脏腑辨证 · 卫气营血辨证</span>
     </div>
     """, unsafe_allow_html=True)
+
+    if not has_api_key:
+        st.warning("⚠️ **请先配置 API Key**：前往「⚙️ 系统设置」页面输入你的 API Key，才能使用 AI 智能诊断功能。")
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 智能问诊", "📊 数据分析", "📚 知识库", "🌿 中药库", "⚙️ 系统设置"])
 
@@ -829,6 +834,7 @@ def render_settings_tab():
 
     st.markdown('<div class="section-container">', unsafe_allow_html=True)
     st.markdown("**🔑 API配置**")
+    st.info("💡 配置 API Key 后即可使用 AI 智能诊断功能。推荐使用 DeepSeek，价格实惠且效果好。")
 
     provider_list = list(API_PROVIDERS.keys())
     current_provider = settings.get("provider", DEFAULT_PROVIDER)
@@ -847,46 +853,52 @@ def render_settings_tab():
     st.caption(f"📡 API 地址：{provider_config['base_url']}")
 
     current_key = settings.get("api_key", "")
-    api_key = st.text_input("API Key", type="password", placeholder="输入你的 API Key（留空使用默认）", value=current_key if current_key != DEFAULT_API_KEY else "")
+    api_key = st.text_input("API Key", type="password", placeholder="请输入你的 API Key", value=current_key if current_key else "")
 
     col1, col2, col3 = st.columns(3)
     with col1:
         if st.button("💾 保存配置", type="primary", use_container_width=True):
-            new_key = api_key if api_key and len(api_key) > 5 else DEFAULT_API_KEY
-            new_settings = {
-                "api_key": new_key,
-                "provider": provider,
-                "model": model
-            }
-            save_settings(new_settings)
-            st.session_state.engine = TCMDiagnosisEngine(new_key, provider, model)
-            st.session_state.engine_key = f"{provider}:{new_key}"
-            st.success(f"✅ 配置已保存：{provider} / {model}")
-            st.rerun()
+            if not api_key or len(api_key) < 10:
+                st.error("❌ 请输入有效的 API Key")
+            else:
+                new_settings = {
+                    "api_key": api_key,
+                    "provider": provider,
+                    "model": model
+                }
+                save_settings(new_settings)
+                st.session_state.engine = TCMDiagnosisEngine(api_key, provider, model)
+                st.session_state.engine_key = f"{provider}:{api_key}"
+                st.success(f"✅ 配置已保存：{provider} / {model}")
+                st.rerun()
     with col2:
         if st.button("🧪 测试连接", use_container_width=True):
-            test_key = api_key if api_key and len(api_key) > 5 else DEFAULT_API_KEY
-            with st.spinner("测试中..."):
-                test_engine = TCMDiagnosisEngine(test_key, provider, model)
-                result = test_engine.analyze_symptoms("测试", [], "", "")
-                if result.get("confidence", 0) > 0 or "失败" not in result.get("syndrome", ""):
-                    st.success("✅ 连接成功！")
-                else:
-                    st.error(f"❌ {result.get('additional_notes', '连接失败')}")
+            if not api_key or len(api_key) < 10:
+                st.error("❌ 请先输入 API Key")
+            else:
+                with st.spinner("测试中..."):
+                    test_engine = TCMDiagnosisEngine(api_key, provider, model)
+                    result = test_engine.analyze_symptoms("测试", [], "", "")
+                    if result.get("confidence", 0) > 0 or "失败" not in result.get("syndrome", ""):
+                        st.success("✅ 连接成功！")
+                    else:
+                        st.error(f"❌ {result.get('additional_notes', '连接失败')}")
     with col3:
-        if st.button("🔄 恢复默认", use_container_width=True):
-            save_settings({"api_key": DEFAULT_API_KEY, "provider": DEFAULT_PROVIDER, "model": ""})
+        if st.button("🗑️ 清除配置", use_container_width=True):
+            save_settings({"api_key": "", "provider": DEFAULT_PROVIDER, "model": ""})
             st.session_state.engine = TCMDiagnosisEngine()
-            st.session_state.engine_key = f"{DEFAULT_PROVIDER}:{DEFAULT_API_KEY}"
-            st.success("✅ 已恢复默认配置")
+            st.session_state.engine_key = f"{DEFAULT_PROVIDER}:"
+            st.info("已清除配置")
             st.rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="section-container">', unsafe_allow_html=True)
     st.markdown("**📊 当前状态**")
-    st.success(f"🔑 当前使用：{settings.get('provider', DEFAULT_PROVIDER)} / {settings.get('model', '默认模型')}")
-    st.caption("默认配置使用 DeepSeek API，其他用户无需配置即可使用")
+    if has_api_key:
+        st.success(f"🔑 已配置：{settings.get('provider', DEFAULT_PROVIDER)} / {settings.get('model', '默认模型')}")
+    else:
+        st.warning("⚠️ 未配置 API Key，无法使用 AI 智能诊断功能")
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="section-container">', unsafe_allow_html=True)
