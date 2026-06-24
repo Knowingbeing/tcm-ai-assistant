@@ -131,10 +131,10 @@ def render_consultation_tab(engine):
                         st.error(result["additional_notes"])
 
                 if st.button("💾 保存问诊记录"):
-                    save_consultation(patient_name, patient_age, patient_gender,
+                    if save_consultation(patient_name, patient_age, patient_gender,
                                      chief_complaint, selected_symptoms, tongue_sign,
-                                     pulse_sign, result)
-                    st.success("问诊记录已保存！")
+                                     pulse_sign, result):
+                        st.success("✅ 问诊记录已保存！可在「数据分析」查看")
 
 def save_consultation(name, age, gender, chief_complaint, symptoms, tongue, pulse, result):
     conn = get_connection()
@@ -159,6 +159,7 @@ def save_consultation(name, age, gender, chief_complaint, symptoms, tongue, puls
         """, (consultation_id, symptom))
 
     conn.commit()
+    return True
 
 def render_analytics_tab():
     st.header("数据分析看板")

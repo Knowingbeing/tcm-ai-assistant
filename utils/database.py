@@ -3,9 +3,12 @@ import os
 from datetime import datetime
 from typing import List, Dict, Optional
 
-# 确保数据库目录存在
-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
-os.makedirs(DATA_DIR, exist_ok=True)
+# Streamlit Cloud 使用 /tmp，本地使用项目目录
+if os.path.exists("/tmp"):
+    DATA_DIR = "/tmp"
+else:
+    DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+    os.makedirs(DATA_DIR, exist_ok=True)
 
 DB_PATH = os.path.join(DATA_DIR, "tcm_consultation.db")
 
