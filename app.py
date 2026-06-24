@@ -8,7 +8,7 @@ import os
 
 sys.path.append(os.path.dirname(__file__))
 from utils.database import get_connection, init_database, insert_sample_data
-from utils.llm_engine import TCMDiagnosisEngine
+from utils.llm_engine import TCMDiagnosisEngine, API_PROVIDERS
 
 st.set_page_config(
     page_title="中医AI智能问诊助手",
@@ -22,9 +22,12 @@ def init_db():
 
 def get_engine():
     api_key = st.session_state.get("api_key", "")
-    if "engine" not in st.session_state or st.session_state.get("engine_key") != api_key:
-        st.session_state.engine = TCMDiagnosisEngine(api_key)
-        st.session_state.engine_key = api_key
+    provider = st.session_state.get("api_provider", "OpenAI")
+    model = st.session_state.get("api_model", "")
+    engine_key = f"{provider}:{api_key}"
+    if "engine" not in st.session_state or st.session_state.get("engine_key") != engine_key:
+        st.session_state.engine = TCMDiagnosisEngine(api_key, provider, model)
+        st.session_state.engine_key = engine_key
     return st.session_state.engine
 
 def main():
@@ -403,38 +406,60 @@ def render_settings_tab():
 
     st.subheader("API配置")
     
-    current_key = st.session_state.get("api_key", "")
-    api_key = st.text_input("OpenAI API Key", type="password", placeholder="sk-...", value=current_key)
-    
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("💾 保存 API Key", type="primary"):
-            if api_key and api_key.startswith("sk-"):
-                st.session_state.api_key = api_key
-                st.session_state.engine = TCMDiagnosisEngine(api_key)
-                st.session_state.engine_key = api_key
-                st.success("✅ API Key 已保存，AI智能诊断已启用")
-                st.rerun()
-            elif api_key:
-                st.error("❌ API Key 格式错误，应以 'sk-' 开头")
-            else:
-                st.session_state.api_key = ""
-                st.session_state.engine = TCMDiagnosisEngine("")
-                st.session_state.engine_key = ""
-                st.info("已切换到演示模式")
-                st.rerun()
+        provider = st.selectbox("选择 API 厂商", list(API_PROVIDERS.keys()),
+                               index=list(API_PROVIDERS.keys()).index(st.session_state.get("api_provider", "OpenAI")))
     with col2:
-        if st.button("🗑️ 清除 API Key"):
+        provider_config = API_PROVIDERS[provider]
+        model = st.selectbox("选择模型", provider_config["models"],
+                            index=provider_config["models"].index(provider_config["default_model"]) if provider_config["default_model"] in provider_config["models"] else 0)
+    
+    st.caption(f"📡 API 地址：{provider_config['base_url']}")
+    
+    current_key = st.session_state.get("api_key", "")
+    api_key = st.text_input("API Key", type="password", placeholder="输入你的 API Key...", value=current_key)
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("💾 保存配置", type="primary"):
+            if api_key and len(api_key) > 5:
+                st.session_state.api_key = api_key
+                st.session_state.api_provider = provider
+                st.session_state.api_model = model
+                st.session_state.engine = TCMDiagnosisEngine(api_key, provider, model)
+                st.session_state.engine_key = f"{provider}:{api_key}"
+                st.success(f"✅ 已保存 {provider} / {model}")
+                st.rerun()
+            else:
+                st.error("❌ 请输入有效的 API Key")
+    with col2:
+        if st.button("🧪 测试连接"):
+            if api_key and len(api_key) > 5:
+                with st.spinner("测试中..."):
+                    test_engine = TCMDiagnosisEngine(api_key, provider, model)
+                    result = test_engine.analyze_symptoms("测试", [], "", "")
+                    if result.get("confidence", 0) > 0 or "失败" not in result.get("syndrome", ""):
+                        st.success("✅ 连接成功！")
+                    else:
+                        st.error(f"❌ {result.get('additional_notes', '连接失败')}")
+            else:
+                st.error("❌ 请先输入 API Key")
+    with col3:
+        if st.button("🗑️ 清除配置"):
             st.session_state.api_key = ""
+            st.session_state.api_provider = "OpenAI"
             st.session_state.engine = TCMDiagnosisEngine("")
             st.session_state.engine_key = ""
             st.info("已切换到演示模式")
             st.rerun()
     
-    if current_key and current_key.startswith("sk-"):
-        st.success("🔑 当前状态：AI智能诊断已启用")
+    st.markdown("---")
+    st.subheader("当前状态")
+    if current_key and len(current_key) > 5:
+        st.success(f"🔑 已配置 {provider} / {model}，AI 智能诊断已启用")
     else:
-        st.info("📋 当前状态：演示模式（基于规则的诊断）")
+        st.info("📋 演示模式（基于规则的诊断）")
 
     st.subheader("数据管理")
     col1, col2 = st.columns(2)
