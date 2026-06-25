@@ -1,0 +1,198 @@
+"""
+Supabase 客户端封装（云端持久化）
+================================
+
+职责：
+1. 单例管理：避免每次请求都新建连接
+2. 多源凭证：Streamlit secrets > 环境变量 > 本地 .streamlit/secrets.toml
+3. 降级策略：未配置时返回 None，调用方走 JSON 兜底
+4. 错误隔离：网络/权限错误不污染上层业务逻辑
+
+上层调用示例：
+    from utils.supabase_client import get_records, save_record, get_settings, save_settings
+
+    records = get_records()              # 替代 load_records()
+    save_record({...})                    # 替代 save_records(records)
+    cfg = get_settings()                  # 替代 load_settings()
+    save_settings({...})                  # 替代 save_settings({...})
+"""
+
+import os
+import streamlit as st
+from typing import List, Dict, Optional
+
+try:
+    from supabase import create_client, Client
+    from postgrest.exceptions import APIError
+    SUPABASE_AVAILABLE = True
+except ImportError:
+    SUPABASE_AVAILABLE = False
+    Client = None
+    APIError = Exception
+
+_CLIENT: Optional["Client"] = None
+
+
+def _get_credentials() -> tuple[Optional[str], Optional[str]]:
+    """从多个来源读取 Supabase 凭证，优先级：
+    1. st.secrets（Streamlit Cloud 部署）
+    2. 环境变量（本地/CI）
+    3. 返回 (None, None) 表示未配置
+    """
+    url, key = None, None
+    try:
+        url = st.secrets.get("SUPABASE_URL")
+        key = st.secrets.get("SUPABASE_KEY")
+    except Exception:
+        pass
+
+    if not url:
+        url = os.environ.get("SUPABASE_URL")
+    if not key:
+        key = os.environ.get("SUPABASE_KEY")
+
+    return url, key
+
+
+def get_client() -> Optional["Client"]:
+    """获取 Supabase 客户端单例。未配置或库缺失时返回 None。"""
+    global _CLIENT
+    if not SUPABASE_AVAILABLE:
+        return None
+
+    if _CLIENT is not None:
+        return _CLIENT
+
+    url, key = _get_credentials()
+    if not url or not key:
+        return None
+
+    try:
+        _CLIENT = create_client(url, key)
+        return _CLIENT
+    except Exception as e:
+        # 不抛异常：让上层走 JSON 兜底
+        print(f"[supabase] 初始化失败：{e}")
+        return None
+
+
+def is_configured() -> bool:
+    """快速判断是否已配置 Supabase（不实际建连）"""
+    url, key = _get_credentials()
+    return bool(url and key)
+
+
+# --------------------------------------------------------------------------
+# 业务封装：consultations 表
+# --------------------------------------------------------------------------
+
+def get_records() -> List[Dict]:
+    """读取所有问诊记录，按时间倒序。失败时返回空列表。"""
+    client = get_client()
+    if client is None:
+        return []
+    try:
+        resp = (
+            client.table("consultations")
+            .select("*")
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return resp.data or []
+    except Exception as e:
+        print(f"[supabase] get_records 失败：{e}")
+        return []
+
+
+def save_record(record: Dict) -> bool:
+    """插入单条问诊记录。返回是否成功。"""
+    client = get_client()
+    if client is None:
+        return False
+    try:
+        # 仅保留数据库已知列，避免脏字段写入失败
+        allowed = {
+            "patient_id", "name", "age", "gender",
+            "chief_complaint", "symptoms",
+            "tongue_sign", "pulse_sign",
+            "syndrome", "syndrome_category",
+            "formula", "formula_adjustment",
+            "treatment_principle", "analysis",
+            "confidence", "source",
+        }
+        payload = {k: v for k, v in record.items() if k in allowed}
+        # symptoms 需为 list 类型
+        if isinstance(payload.get("symptoms"), str):
+            import json
+            try:
+                payload["symptoms"] = json.loads(payload["symptoms"])
+            except Exception:
+                payload["symptoms"] = []
+        client.table("consultations").insert(payload).execute()
+        return True
+    except Exception as e:
+        print(f"[supabase] save_record 失败：{e}")
+        return False
+
+
+def clear_records() -> bool:
+    """清空所有问诊记录（管理用）"""
+    client = get_client()
+    if client is None:
+        return False
+    try:
+        client.table("consultations").delete().gt("id", 0).execute()
+        return True
+    except Exception as e:
+        print(f"[supabase] clear_records 失败：{e}")
+        return False
+
+
+# --------------------------------------------------------------------------
+# 业务封装：settings 表（单行，id=1）
+# --------------------------------------------------------------------------
+
+_DEFAULT_SETTINGS = {
+    "api_key": "",
+    "provider": "DeepSeek",
+    "model": "",
+}
+
+
+def get_settings() -> Dict:
+    """读取系统设置。未配置或查询失败时返回默认值。"""
+    client = get_client()
+    if client is None:
+        return dict(_DEFAULT_SETTINGS)
+    try:
+        resp = client.table("settings").select("*").eq("id", 1).execute()
+        if resp.data:
+            row = resp.data[0]
+            return {
+                "api_key": row.get("api_key") or "",
+                "provider": row.get("provider") or "DeepSeek",
+                "model": row.get("model") or "",
+            }
+        return dict(_DEFAULT_SETTINGS)
+    except Exception as e:
+        print(f"[supabase] get_settings 失败：{e}")
+        return dict(_DEFAULT_SETTINGS)
+
+
+def save_settings(settings: Dict) -> bool:
+    """保存系统设置（upsert 到 id=1）"""
+    client = get_client()
+    if client is None:
+        return False
+    try:
+        payload = {
+            "id": 1,
+            "api_key": settings.get("api_key", ""),
+            "provider": settings.get("provider", "DeepSeek"),
+            "model": settings.get("model", ""),
+        }
+        client.table("settings").upsert(payload).execute()
+        return True
+    except Exception as e:
+        print(f"[supabase] save_settings 失败：{e}")
+        return False

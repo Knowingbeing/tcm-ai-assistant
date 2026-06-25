@@ -5,10 +5,19 @@ import plotly.graph_objects as go
 import json
 import os
 from datetime import datetime
+from typing import Dict, List
 import sys
 
 sys.path.append(os.path.dirname(__file__))
 from utils.llm_engine import TCMDiagnosisEngine, API_PROVIDERS, DEFAULT_API_KEY, DEFAULT_PROVIDER
+from utils.supabase_client import (
+    is_configured as supabase_configured,
+    get_records as _sb_get_records,
+    save_record as _sb_save_record,
+    clear_records as _sb_clear_records,
+    get_settings as _sb_get_settings,
+    save_settings as _sb_save_settings,
+)
 from data.tcm_data import FORMULAS, SYNDROMES, HERBS
 
 st.set_page_config(
@@ -342,7 +351,34 @@ os.makedirs(DATA_DIR, exist_ok=True)
 RECORDS_FILE = os.path.join(DATA_DIR, "tcm_records.json")
 SETTINGS_FILE = os.path.join(DATA_DIR, "tcm_settings.json")
 
+
+def _row_to_record(row: Dict) -> Dict:
+    """将 Supabase 行映射为上层 UI 期望的 record 格式。"""
+    return {
+        "id": row.get("id"),
+        "name": row.get("name", "匿名"),
+        "age": row.get("age", 0) or 0,
+        "gender": row.get("gender", ""),
+        "chief_complaint": row.get("chief_complaint", ""),
+        "symptoms": row.get("symptoms", []) or [],
+        "tongue_sign": row.get("tongue_sign", ""),
+        "pulse_sign": row.get("pulse_sign", ""),
+        "syndrome": row.get("syndrome", "待辨证"),
+        "syndrome_category": row.get("syndrome_category", ""),
+        "formula": row.get("formula", "待推荐"),
+        "formula_adjustment": row.get("formula_adjustment", ""),
+        "treatment_principle": row.get("treatment_principle", ""),
+        "analysis": row.get("analysis", ""),
+        "confidence": row.get("confidence", 0) or 0,
+        "date": row.get("created_at", ""),
+    }
+
+
 def load_records():
+    """读取问诊记录：优先 Supabase，未配置时回退 JSON 文件。"""
+    if supabase_configured():
+        rows = _sb_get_records()
+        return [_row_to_record(r) for r in rows]
     if os.path.exists(RECORDS_FILE):
         try:
             with open(RECORDS_FILE, "r", encoding="utf-8") as f:
@@ -351,11 +387,24 @@ def load_records():
             return []
     return []
 
+
 def save_records(records):
+    """保存问诊记录。Supabase 模式下走单条插入；JSON 模式保持原行为。"""
+    if supabase_configured():
+        # Supabase 模式下不批量覆盖（避免误删），仅追加最新一条
+        # 上层调用约定：append 一条新记录后调用本函数
+        if records:
+            latest = records[-1]
+            _sb_save_record(latest)
+        return
     with open(RECORDS_FILE, "w", encoding="utf-8") as f:
         json.dump(records, f, ensure_ascii=False, indent=2)
 
+
 def load_settings():
+    """读取系统设置：优先 Supabase，未配置时回退 JSON 文件。"""
+    if supabase_configured():
+        return _sb_get_settings()
     if os.path.exists(SETTINGS_FILE):
         try:
             with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
@@ -364,7 +413,12 @@ def load_settings():
             pass
     return {"api_key": DEFAULT_API_KEY, "provider": DEFAULT_PROVIDER, "model": ""}
 
+
 def save_settings(settings):
+    """保存系统设置。Supabase 模式 upsert 到单行；JSON 模式保持原行为。"""
+    if supabase_configured():
+        _sb_save_settings(settings)
+        return
     with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
         json.dump(settings, f, ensure_ascii=False, indent=2)
 
@@ -395,6 +449,9 @@ def main():
 
     if not has_api_key:
         st.warning("⚠️ **请先配置 API Key**：前往「⚙️ 系统设置」页面输入你的 API Key，才能使用 AI 智能诊断功能。")
+
+    if not supabase_configured():
+        st.info("💡 **数据持久化提示**：当前使用本地 JSON 存储，Streamlit Cloud 重启后数据会丢失。推荐配置 Supabase（详见「⚙️ 系统设置」底部）。")
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 智能问诊", "📊 数据分析", "📚 知识库", "🌿 中药库", "⚙️ 系统设置"])
 
@@ -520,9 +577,7 @@ def render_consultation_tab(engine):
             st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
             if st.button("💾 保存此问诊记录", type="primary", use_container_width=True, key="save_btn"):
-                records = load_records()
                 new_record = {
-                    "id": len(records) + 1,
                     "name": inp.get("name", "匿名"),
                     "age": inp.get("age", 0),
                     "gender": inp.get("gender", ""),
@@ -536,10 +591,19 @@ def render_consultation_tab(engine):
                     "confidence": result["confidence"],
                     "analysis": result["analysis"],
                     "treatment_principle": result.get("treatment_principle", ""),
-                    "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    "source": "manual",
                 }
-                records.append(new_record)
-                save_records(records)
+                if supabase_configured():
+                    ok = _sb_save_record(new_record)
+                    if not ok:
+                        st.error("❌ 保存到云端失败，请检查 Supabase 配置")
+                        st.stop()
+                else:
+                    records = load_records()
+                    new_record["id"] = len(records) + 1
+                    new_record["date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    records.append(new_record)
+                    save_records(records)
                 st.session_state.last_result = None
                 st.session_state.last_input = None
                 st.success("✅ 问诊记录已保存！点击「📊 数据分析」查看")
@@ -900,6 +964,11 @@ def render_settings_tab():
         st.success(f"🔑 已配置：{settings.get('provider', DEFAULT_PROVIDER)} / {settings.get('model', '默认模型')}")
     else:
         st.warning("⚠️ 未配置 API Key，无法使用 AI 智能诊断功能")
+
+    if supabase_configured():
+        st.success("☁️ 数据存储：Supabase 云端（重启不丢失）")
+    else:
+        st.warning("💾 数据存储：本地 JSON（重启可能丢失，建议配置 Supabase）")
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="section-container">', unsafe_allow_html=True)
@@ -907,8 +976,15 @@ def render_settings_tab():
     records = load_records()
     st.info(f"📊 共 {len(records)} 条问诊记录")
     if st.button("🗑️ 清空所有记录", use_container_width=True):
-        save_records([])
-        st.success("已清空")
+        if supabase_configured():
+            ok = _sb_clear_records()
+            if ok:
+                st.success("已清空云端记录")
+            else:
+                st.error("❌ 清空失败，请检查 Supabase 配置")
+        else:
+            save_records([])
+            st.success("已清空")
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 

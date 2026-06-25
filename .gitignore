@@ -47,5 +47,5 @@ Thumbs.db
 # Logs
 *.log
 
-# Streamlit
+# Streamlit secrets（含 Supabase 凭证，已加 .example 模板）
 .streamlit/secrets.toml
