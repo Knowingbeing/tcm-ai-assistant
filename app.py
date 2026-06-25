@@ -1577,17 +1577,17 @@ def render_settings_tab():
 
     col1, col2 = st.columns(2)
     with col1:
-        provider = st.selectbox("选择 API 厂商", provider_list, index=provider_idx)
+        provider = st.selectbox("选择 API 厂商", provider_list, index=provider_idx, key="cfg_provider")
     with col2:
         provider_config = API_PROVIDERS[provider]
         models = provider_config["models"]
         current_model = settings.get("model", "") or provider_config["default_model"]
         model_idx = models.index(current_model) if current_model in models else 0
-        model = st.selectbox("选择模型", models, index=model_idx)
+        model = st.selectbox("选择模型", models, index=model_idx, key="cfg_model")
 
     st.caption(f"📡 API 地址：{provider_config['base_url']}")
 
-    api_key = st.text_input("API Key", type="password", placeholder="请输入你的 API Key", value=current_key if current_key else "")
+    api_key = st.text_input("API Key", type="password", placeholder="请输入你的 API Key", value=current_key if current_key else "", key="cfg_api_key")
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -1617,12 +1617,20 @@ def render_settings_tab():
                             st.error("❌ 客户端初始化失败，请检查 API Key 与网络")
                         else:
                             result = test_engine.analyze_symptoms("测试主诉：头痛", [], "", "")
-                            if isinstance(result, dict) and (result.get("confidence", 0) > 0 or "失败" not in result.get("syndrome", "")):
-                                st.success("✅ 连接成功！")
+                            if isinstance(result, dict):
+                                conf = result.get("confidence", 0)
+                                syn = result.get("syndrome", "")
+                                cat = result.get("syndrome_category", "")
+                                # 各种配置错误都明确告诉用户怎么修
+                                if conf > 0 and "配置错误" not in cat and "网络错误" not in cat and "限流" not in cat:
+                                    st.success(f"✅ 连接成功！{provider} 返回正常（测试证型：{syn}，置信度 {conf}%）")
+                                else:
+                                    st.error(f"❌ {result.get('additional_notes', '连接失败')}")
+                                    st.caption(f"诊断类别：{cat} | 详情：{result.get('analysis', '')[:200]}")
                             else:
-                                st.error(f"❌ {result.get('additional_notes', '连接失败')}")
+                                st.error(f"❌ 返回非预期结果：{str(result)[:200]}")
                     except Exception as e:
-                        st.error(f"❌ 测试异常：{str(e)[:160]}")
+                        st.error(f"❌ 测试异常：{str(e)[:200]}")
     with col3:
         if st.button("🗑️  清除配置", use_container_width=True):
             save_settings({"api_key": "", "provider": DEFAULT_PROVIDER, "model": ""})
@@ -1652,6 +1660,23 @@ def render_settings_tab():
         st.info("💡 请先配置 API Key 才能使用 AI 智能诊断功能")
     if not supabase_configured():
         st.info("💡 推荐配置 Supabase 云端数据库，重启后数据不丢失（详见 `supabase/README.md`）")
+    # DeepSeek 常见问题提示
+    if has_api_key and settings.get("provider", "") == "DeepSeek":
+        cur = (current_key or "").strip()
+        if not cur.startswith("sk-"):
+            st.warning("⚠️ DeepSeek 的 API Key 通常以 `sk-` 开头，请确认 Key 是否完整（不要漏字符）")
+        elif len(cur) < 30:
+            st.warning("⚠️ API Key 看起来太短，DeepSeek Key 一般 30+ 字符，请检查是否复制完整")
+    # API 余额快速说明
+    with st.expander("💳 DeepSeek API 余额 / Key 状态说明", expanded=False):
+        st.markdown("""
+- **登录控制台**：[https://platform.deepseek.com/](https://platform.deepseek.com/) → 顶部右上角「API Keys」
+- **查看余额**：左侧菜单「余额」可看剩余金额；新注册一般有赠额，过期/用完会 402
+- **常见 401 原因**：Key 复制时漏字符 / 多空格 / 已删除 / 已重置
+- **常见 402 原因**：账号余额不足，去控制台充值即可
+- **常见 429 原因**：请求过快，免费档限速 1 次/秒
+- **网络问题**：Streamlit Cloud 服务器在海外，连 `api.deepseek.com` 偶有抖动，重试或换时段
+        """)
     st.markdown('</div>', unsafe_allow_html=True)
 
     # ===== 数据管理 =====
