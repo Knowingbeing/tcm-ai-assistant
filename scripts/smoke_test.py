@@ -133,6 +133,73 @@ def main():
         print(f"  [FAIL] app.py 语法错误：{e}")
         sys.exit(1)
 
+    test_section("7. P1 多轮问诊 — should_ask_followup 规则")
+    from utils.llm_engine import TCMDiagnosisEngine
+    eng = TCMDiagnosisEngine(api_key="", provider="DeepSeek", model="")
+    # 7.1 全空：应追问
+    fu = eng.should_ask_followup("", [], "", "", round_count=0)
+    assert_true(fu["need_followup"], "全空 → 需要追问")
+    assert_true(len(fu["questions"]) <= 2, f"追问问题数 <= 2, 实际 {len(fu['questions'])}")
+    # 7.2 已有舌脉 + 寒热汗便关键词 → 不再追问
+    fu2 = eng.should_ask_followup(
+        "头痛三天", ["恶寒", "无汗", "鼻塞", "大便干结"],
+        "舌淡苔白", "脉浮紧", round_count=0,
+    )
+    assert_eq(fu2["need_followup"], False, "信息充分 → 不追问")
+    # 7.3 round_count >= 2 强制不再追问
+    fu3 = eng.should_ask_followup("", [], "", "", round_count=2)
+    assert_eq(fu3["need_followup"], False, "round=2 强制不再追问")
+    # 7.4 缺舌象 → 追问中应含 tongue_sign
+    fu4 = eng.should_ask_followup("咳嗽", ["咽干"], "", "脉浮", round_count=0)
+    fields = [q["field"] for q in fu4["questions"]]
+    assert_true("tongue_sign" in fields, f"缺舌象应追问, 实际 fields={fields}")
+    # 7.5 每个 question 必须有 options 列表
+    for q in fu4["questions"]:
+        assert_true(len(q["options"]) >= 2, f"{q['field']} 至少 2 个选项")
+
+    test_section("8. P1 多轮问诊 — engine 返回结构")
+    eng2 = TCMDiagnosisEngine(api_key="", provider="DeepSeek", model="")
+    r = eng2.analyze_symptoms("头痛三天，恶寒无汗", ["头痛", "恶寒"], "舌淡苔白", "脉浮紧")
+    for k in ("syndrome", "syndrome_category", "analysis", "formula", "confidence"):
+        assert_true(k in r, f"analyze_symptoms 返回含字段 {k}")
+    assert_true(isinstance(r["confidence"], int), f"confidence 是 int, 实际 {type(r['confidence'])}")
+    assert_true(0 <= r["confidence"] <= 100, f"confidence ∈ [0,100], 实际 {r['confidence']}")
+
+    test_section("9. P1 schema 迁移文件存在性 + 关键 DDL")
+    mig = os.path.join(PROJECT_ROOT, "supabase", "migration_p1_session.sql")
+    assert_true(os.path.exists(mig), f"migration_p1_session.sql 存在：{mig}")
+    with open(mig, "r", encoding="utf-8") as f:
+        mig_sql = f.read()
+    for kw in ("session_id", "round_index", "messages", "jsonb",
+               "idx_consultations_session", "schema_version"):
+        assert_true(kw in mig_sql, f"迁移 SQL 含 {kw!r}")
+    # 验证 schema.sql 主体没破
+    with open(schema_path, "r", encoding="utf-8") as f:
+        schema_sql = f.read()
+    for kw in ("create table if not exists patients",
+               "create table if not exists consultations",
+               "create table if not exists settings"):
+        assert_true(kw in schema_sql, f"schema.sql 仍含 {kw!r}")
+
+    test_section("10. P1 — _apply_followup_answer 字段映射")
+    import app as _app
+    fake = {
+        "session_id": "test", "round": 0, "messages": [],
+        "pending_questions": [
+            {"field": "tongue_sign", "label": "舌象？", "options": ["舌红"]},
+        ],
+        "chief_complaint": "x", "symptoms": [], "tongue_sign": "", "pulse_sign": "",
+        "patient": {"name": "x", "age": 30, "gender": "男"}, "result": None,
+    }
+    _app._apply_followup_answer(fake, fake["pending_questions"][0], "舌淡苔白", eng2)
+    assert_eq(fake["tongue_sign"], "舌淡苔白", "tongue_sign 写回成功")
+    assert_eq(len(fake["pending_questions"]), 0, "追问问题被清空")
+
+    test_section("11. P1 — supabase_client API 存在性")
+    from utils.supabase_client import get_sessions, get_session_history
+    assert_true(callable(get_sessions), "get_sessions 可调用")
+    assert_true(callable(get_session_history), "get_session_history 可调用")
+
     print("\n" + "=" * 50)
     print("[PASS] 全部冒烟测试通过")
     print("=" * 50)

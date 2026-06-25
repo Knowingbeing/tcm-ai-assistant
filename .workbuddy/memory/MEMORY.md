@@ -30,8 +30,40 @@
 - 部署配置走 `.streamlit/secrets.toml`（已 gitignore），模板是 `secrets.toml.example`
 
 ## 优先级路线
-- P0 ✅ Supabase 持久化（已完成，2026-06-25）
-- P0 ✅ UI 大改版清新山水风（已完成，2026-06-25）
-- P1 多轮问诊（追问式对话）
+- P0 ✅ Supabase 持久化（2026-06-25）
+- P0 ✅ UI 大改版清新山水风（2026-06-25）
+- P1 ✅ 多轮问诊 / 追问式对话（2026-06-25）
 - P2 舌象识别 / 用户系统
+
+## P1 多轮问诊（已完成，2026-06-25）
+
+**用户选型**：AI 主动追问 + 智能判断追问必要性 + 轻量级 session 缓存
+
+**架构**
+- `utils/llm_engine.py` 新增 3 个方法：
+  - `should_ask_followup(cc, symptoms, tongue, pulse, round) → {need_followup, questions, reason}`
+  - `chat_with_history(messages, temperature=0.3)` 多轮 LLM 调用
+  - `diagnose_with_conversation(session)` 完整对话版辨证
+- `supabase/migration_p1_session.sql` 给 consultations 表加：
+  - `session_id uuid` / `round_index int` / `messages jsonb` + 索引 `idx_session`
+- `utils/supabase_client.py` 新增 `save_record / get_sessions / get_session_history`
+- `app.py` 重构 `render_consultation_tab` 为聊天窗口，state 走 `st.session_state.chat_session`
+
+**追问答案分配规则**（`_apply_followup_answer`）
+- 问舌象 / 苔 → 写回 `sess["tongue_sign"]`
+- 问脉象 → 写回 `sess["pulse_sign"]`
+- 寒热 / 二便 / 出汗 → 追加到 `sess["symptoms"]` 列表
+- 其它 → 拼到 `sess["extra_notes"]`
+
+**问诊流程**
+1. 用户填主诉 + 初始四诊 → 开始问诊
+2. 走 `_maybe_diagnose` 调 LLM 判断：信息够 → `_finalize_diagnosis`；不够 → 给出 2-4 个追问选项
+3. 用户点选项 / 自由输入 → `_apply_followup_answer` 写回对应字段
+4. 累计到 4 轮强制收尾
+5. 完成后可保存会话到 Supabase
+
+**测试**
+- `scripts/smoke_test.py` 11 段全过
+- 端到端：头痛三天 → 追问舌/寒热/二便/脉 → 正确辨证
+- streamlit run app.py --port 8765 HTTP 200
 

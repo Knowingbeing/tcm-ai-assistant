@@ -419,6 +419,36 @@ st.markdown("""
     .empty-state .title { font-size: 1.05rem; color: var(--c-ink); margin-bottom: 0.3rem; }
     .empty-state .desc { font-size: 0.88rem; }
 
+    /* ===== 多轮问诊：聊天卡片 ===== */
+    .chat-card {
+        background: var(--c-surface);
+        border-radius: 16px;
+        padding: 1.2rem 1.2rem 0.9rem;
+        border: 1px solid var(--c-line);
+        box-shadow: var(--shadow-sm);
+        display: flex;
+        flex-direction: column;
+        min-height: 540px;
+    }
+    .chat-card .card-title { display: flex; align-items: center; }
+    .chat-card .stChatMessage { background: transparent !important; }
+
+    /* ===== 追问引导块 ===== */
+    .followup-block {
+        background: linear-gradient(135deg, #FFF9E8 0%, #FFF5D6 100%);
+        border-left: 3px solid var(--c-amber);
+        border-radius: 10px;
+        padding: 0.9rem 1rem;
+        margin: 0.6rem 0 0.4rem;
+    }
+    .q-label {
+        font-size: 0.88rem;
+        font-weight: 600;
+        color: #5C4A1E;
+        margin: 0.5rem 0 0.4rem;
+    }
+    .q-label:first-child { margin-top: 0; }
+
     /* ===== 分隔条 ===== */
     .divider {
         height: 1px; background: var(--c-line);
@@ -536,6 +566,9 @@ def get_engine():
     return st.session_state.engine
 
 def main():
+    # 多轮问诊 — 会话状态初始化
+    if "chat_session" not in st.session_state:
+        st.session_state.chat_session = {}
     engine = get_engine()
     settings = load_settings()
     has_api_key = bool(settings.get("api_key", ""))
@@ -629,208 +662,510 @@ def main():
         render_settings_tab()
 
 def render_consultation_tab(engine):
+    """多轮问诊 tab
+    模式：左 sticky 表单（基础信息+主诉） + 右 chat 窗口（AI 主动追问 → 引导选择 → 最终辨证）
+    状态：st.session_state.chat_session = {
+        "session_id": str (uuid),
+        "round": int,
+        "messages": [{role, content, ts, kind}],
+        "pending_questions": [...],
+        "chief_complaint": str,
+        "symptoms": [],
+        "tongue_sign": "",
+        "pulse_sign": "",
+        "patient": {name, age, gender},
+        "result": {...} | None,
+    }
+    """
+    import uuid as _uuid
+    from datetime import datetime as _dt
+
+    # 初始化会话
+    sess = st.session_state.chat_session
+    if not sess.get("session_id"):
+        sess["session_id"] = str(_uuid.uuid4())
+        sess["round"] = 0
+        sess["messages"] = []
+        sess["pending_questions"] = []
+        sess["chief_complaint"] = ""
+        sess["symptoms"] = []
+        sess["tongue_sign"] = ""
+        sess["pulse_sign"] = ""
+        sess["patient"] = {"name": "匿名", "age": 30, "gender": "男"}
+        sess["result"] = None
+        # 欢迎语
+        sess["messages"].append({
+            "role": "assistant",
+            "kind": "greeting",
+            "content": "你好，我是你的中医 AI 助手 🩺\n请告诉我你哪里不舒服？我会通过 1-2 个关键问题帮你辨证。",
+            "ts": _dt.now().strftime("%H:%M:%S"),
+        })
+
+    # ===== 顶部卡片 =====
     st.markdown("""
     <div class="card">
-        <div class="card-title"><div class="ti">📋</div>智能问诊</div>
+        <div class="card-title"><div class="ti">📋</div>多轮智能问诊</div>
         <p style="color:var(--c-ink-soft); margin:0; font-size:0.9rem;">
-            填写患者信息与四诊资料，AI 将基于中医辨证体系给出证型与方剂建议。
+            AI 将根据你提供的信息主动追问 1-2 个关键问题。问完后再做辨证。
         </p>
     </div>
     """, unsafe_allow_html=True)
 
-    col1, col2 = st.columns([2, 3], gap="large")
+    col1, col2 = st.columns([1, 1.6], gap="large")
 
+    # ===================== 左侧：基础信息 + 主诉 =====================
     with col1:
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.markdown("""
         <div class="card-title"><div class="ti">👤</div>患者信息</div>
         """, unsafe_allow_html=True)
-
-        patient_name = st.text_input("姓名", placeholder="请输入患者姓名", label_visibility="collapsed")
-        col_age, col_gender = st.columns(2)
-        with col_age:
-            patient_age = st.number_input("年龄", min_value=0, max_value=150, value=30)
-        with col_gender:
-            patient_gender = st.selectbox("性别", ["男", "女"])
-
-        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-        st.markdown("""
-        <div class="card-title"><div class="ti">📝</div>主诉</div>
-        """, unsafe_allow_html=True)
-        chief_complaint = st.text_area("主诉描述", placeholder="例如：头痛、发热 3 天，伴恶寒、无汗", height=110, label_visibility="collapsed")
-
-        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-        st.markdown("""
-        <div class="card-title"><div class="ti">🔍</div>伴随症状</div>
-        """, unsafe_allow_html=True)
-        all_symptoms = ["发热", "恶寒", "畏寒", "头痛", "头晕", "咳嗽", "鼻塞", "流涕",
-                       "咽喉痛", "胸闷", "心悸", "腹痛", "腹泻", "便秘", "食欲不振",
-                       "口渴", "口苦", "失眠", "乏力", "自汗", "盗汗", "腰膝酸软",
-                       "畏寒肢冷", "呕吐", "腹胀", "胸胁胀痛", "善太息", "情志抑郁",
-                       "面红目赤", "急躁易怒", "眩晕", "耳鸣", "多梦", "健忘",
-                       "气短", "神疲", "四肢厥冷", "干咳少痰", "痰多", "痰黄稠",
-                       "关节疼痛", "身热不扬", "心烦", "消渴", "刺痛", "面色晦暗"]
-        selected_symptoms = st.multiselect("选择症状", all_symptoms, label_visibility="collapsed")
+        sess["patient"]["name"] = st.text_input(
+            "姓名", value=sess["patient"].get("name", "匿名"),
+            placeholder="可填可不填", label_visibility="collapsed",
+            key="chat_patient_name",
+        )
+        c1, c2 = st.columns(2)
+        with c1:
+            sess["patient"]["age"] = st.number_input(
+                "年龄", min_value=0, max_value=150,
+                value=int(sess["patient"].get("age", 30)),
+                key="chat_patient_age",
+            )
+        with c2:
+            gender_idx = 0 if sess["patient"].get("gender", "男") == "男" else 1
+            sess["patient"]["gender"] = st.selectbox(
+                "性别", ["男", "女"], index=gender_idx, key="chat_patient_gender",
+            )
 
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         st.markdown("""
-        <div class="card-title"><div class="ti">👅</div>舌脉</div>
+        <div class="card-title"><div class="ti">📝</div>主诉与症状</div>
         """, unsafe_allow_html=True)
-        col_tongue, col_pulse = st.columns(2)
-        with col_tongue:
-            tongue_sign = st.text_input("舌象", placeholder="如：舌苔薄白", label_visibility="collapsed")
-        with col_pulse:
-            pulse_sign = st.text_input("脉象", placeholder="如：脉浮紧", label_visibility="collapsed")
+        chief = st.text_area(
+            "主诉",
+            value=sess.get("chief_complaint", ""),
+            placeholder="例如：最近 3 天头痛、怕冷、不出汗",
+            height=100, label_visibility="collapsed",
+            key="chat_chief",
+        )
+        sess["chief_complaint"] = chief
+
+        all_symptoms = [
+            "发热", "恶寒", "畏寒", "头痛", "头晕", "咳嗽", "鼻塞", "流涕",
+            "咽喉痛", "胸闷", "心悸", "腹痛", "腹泻", "便秘", "食欲不振",
+            "口渴", "口苦", "失眠", "乏力", "自汗", "盗汗", "腰膝酸软",
+            "畏寒肢冷", "呕吐", "腹胀", "胸胁胀痛", "善太息", "情志抑郁",
+            "面红目赤", "急躁易怒", "眩晕", "耳鸣", "多梦", "健忘",
+            "气短", "神疲", "四肢厥冷", "干咳少痰", "痰多", "痰黄稠",
+            "关节疼痛", "身热不扬", "心烦", "消渴", "刺痛", "面色晦暗",
+        ]
+        sess["symptoms"] = st.multiselect(
+            "伴随症状", all_symptoms,
+            default=sess.get("symptoms", []),
+            label_visibility="collapsed",
+            key="chat_symptoms",
+        )
+
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        st.markdown("""
+        <div class="card-title"><div class="ti">👅</div>舌脉（可选）</div>
+        """, unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        with c1:
+            sess["tongue_sign"] = st.text_input(
+                "舌象", value=sess.get("tongue_sign", ""),
+                placeholder="如：舌淡苔白", label_visibility="collapsed",
+                key="chat_tongue",
+            )
+        with c2:
+            sess["pulse_sign"] = st.text_input(
+                "脉象", value=sess.get("pulse_sign", ""),
+                placeholder="如：脉浮紧", label_visibility="collapsed",
+                key="chat_pulse",
+            )
+
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        btn_col1, btn_col2 = st.columns(2)
+        with btn_col1:
+            start_clicked = st.button(
+                "🚀 开始问诊", type="primary",
+                use_container_width=True, key="chat_start",
+            )
+        with btn_col2:
+            reset_clicked = st.button(
+                "🔄 重新开始", use_container_width=True, key="chat_reset",
+            )
+
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # ===================== 右侧：聊天窗口 =====================
     with col2:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown('<div class="chat-card">', unsafe_allow_html=True)
         st.markdown("""
-        <div class="card-title"><div class="ti">🤖</div>AI 辨证结果</div>
-        """, unsafe_allow_html=True)
+        <div class="card-title"><div class="ti">💬</div>对话窗口
+            <span style="font-size:0.75rem; color:var(--c-ink-soft); font-weight:normal; margin-left:auto;">
+                第 <b style="color:var(--c-primary)">{round}</b> 轮
+            </span>
+        </div>
+        """.replace("{round}", str(sess["round"])), unsafe_allow_html=True)
 
-        diagnose_clicked = st.button("🔍  开始智能诊断", type="primary", use_container_width=True)
+        # 渲染历史消息
+        _render_chat_history(sess["messages"])
 
-        if diagnose_clicked:
-            if not chief_complaint:
-                st.error("⚠️ 请先填写主诉信息")
-            else:
-                with st.spinner("🔄 AI 正在辨证论治..."):
-                    result = engine.analyze_symptoms(chief_complaint, selected_symptoms, tongue_sign, pulse_sign)
-
-                st.session_state.last_result = result
-                st.session_state.last_input = {
-                    "name": patient_name or "匿名",
-                    "age": patient_age,
-                    "gender": patient_gender,
-                    "chief_complaint": chief_complaint,
-                    "symptoms": selected_symptoms,
-                    "tongue_sign": tongue_sign,
-                    "pulse_sign": pulse_sign,
-                }
-
-        if st.session_state.get("last_result"):
-            result = st.session_state.last_result
-            inp = st.session_state.get("last_input", {})
-            is_ok = result["confidence"] > 0
-
-            # 顶部诊断卡片
-            hero_cls = "" if is_ok else " fail"
-            conf = result["confidence"]
-            st.markdown(f"""
-            <div class="result-stack">
-                <div class="result-hero{hero_cls}">
-                    <div class="label">{'✅ 诊断完成' if is_ok else '❌ 诊断失败'}</div>
-                    <div class="value">🩺 {result['syndrome']}</div>
-                    <div class="row">
-                        <div class="col">
-                            <div class="lab">辨证体系</div>
-                            <div class="val">{result.get('syndrome_category', '待分类')}</div>
-                        </div>
-                        <div class="col">
-                            <div class="lab">置信度</div>
-                            <div class="val">{conf}%</div>
-                            <div class="confidence-bar"><div class="fill" style="width:{min(conf,100)}%"></div></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            # 辨证分析
-            st.markdown(f"""
-            <div class="result-card" style="margin-top:0.9rem">
-                <div class="head">📖 辨证分析</div>
-                <div class="body">{result['analysis']}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            # 治疗原则
-            if result.get("treatment_principle") and result["treatment_principle"] not in ("无", ""):
-                st.markdown(f"""
-                <div class="result-card">
-                    <div class="head">🎯 治疗原则</div>
-                    <div class="body">{result['treatment_principle']}</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            # 方剂
-            formula = result.get("formula", "")
-            if formula and formula not in ("无", "待推荐"):
-                st.markdown(f"""
-                <div class="result-card">
-                    <div class="head">💊 推荐方剂</div>
-                    <div class="formula">{formula}</div>
-                </div>
-                """, unsafe_allow_html=True)
-                if result.get("formula_adjustment") and result["formula_adjustment"] not in ("无", ""):
-                    st.markdown(f"""
-                    <div class="result-card" style="border-left:3px solid var(--c-amber)">
-                        <div class="head" style="color:#8B6A2E">🧩 加减建议</div>
-                        <div class="body">{result['formula_adjustment']}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            # 备注
-            if result.get("additional_notes") and result["additional_notes"] not in ("无", ""):
-                st.markdown(f"""
-                <div class="result-card" style="border-left:3px solid var(--c-warning)">
-                    <div class="head" style="color:#A8782E">💡 提示</div>
-                    <div class="body">{result['additional_notes']}</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-
-            col_save, col_clear = st.columns(2)
-            with col_save:
-                if st.button("💾  保存此次问诊", type="primary", use_container_width=True, key="save_btn"):
-                    new_record = {
-                        "name": inp.get("name", "匿名"),
-                        "age": inp.get("age", 0),
-                        "gender": inp.get("gender", ""),
-                        "chief_complaint": inp.get("chief_complaint", ""),
-                        "symptoms": inp.get("symptoms", []),
-                        "tongue_sign": inp.get("tongue_sign", ""),
-                        "pulse_sign": inp.get("pulse_sign", ""),
-                        "syndrome": result["syndrome"],
-                        "syndrome_category": result.get("syndrome_category", ""),
-                        "formula": result["formula"],
-                        "confidence": result["confidence"],
-                        "analysis": result["analysis"],
-                        "treatment_principle": result.get("treatment_principle", ""),
-                        "source": "manual",
-                    }
-                    if supabase_configured():
-                        ok = _sb_save_record(new_record)
-                        if not ok:
-                            st.error("❌ 保存到云端失败，请检查 Supabase 配置")
-                            st.stop()
-                    else:
-                        records_local = load_records()
-                        new_record["id"] = len(records_local) + 1
-                        new_record["date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        records_local.append(new_record)
-                        save_records(records_local)
-                    st.session_state.last_result = None
-                    st.session_state.last_input = None
-                    st.success("✅ 问诊记录已保存！点击「📊 数据分析」查看")
+        # 追问问题：快捷选项
+        if sess.get("pending_questions"):
+            st.markdown('<div class="followup-block">', unsafe_allow_html=True)
+            st.markdown("**🤔 AI 想了解：**", unsafe_allow_html=True)
+            for q in sess["pending_questions"]:
+                st.markdown(f"<div class='q-label'>{q['label']}</div>", unsafe_allow_html=True)
+                cols = st.columns(min(len(q["options"]), 4))
+                for idx, opt in enumerate(q["options"]):
+                    with cols[idx % 4]:
+                        if st.button(
+                            opt, key=f"opt_{q['field']}_{idx}",
+                            use_container_width=True,
+                        ):
+                            _apply_followup_answer(sess, q, opt, engine)
+                            st.rerun()
+            # 自由输入框
+            custom = st.text_input(
+                "或者用自己的话回答", key="custom_answer",
+                placeholder="例如：舌尖红、苔薄黄",
+                label_visibility="collapsed",
+            )
+            if st.button("✉️ 提交回答", use_container_width=True, key="custom_submit"):
+                if custom.strip():
+                    # 取第一个待追问问题，把 custom 写到对应 field
+                    q = sess["pending_questions"][0]
+                    _apply_followup_answer(sess, q, custom.strip(), engine)
                     st.rerun()
-            with col_clear:
-                if st.button("🔄  重新诊断", use_container_width=True, key="clear_btn"):
-                    st.session_state.last_result = None
-                    st.session_state.last_input = None
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        # 自由对话输入（仅当无 pending_questions 且无 result）
+        elif sess["result"] is None:
+            user_msg = st.text_input(
+                "继续对话", key="chat_user_msg",
+                placeholder="补充症状或问 AI 问题…",
+                label_visibility="collapsed",
+            )
+            c1, c2 = st.columns([3, 1])
+            with c1:
+                if st.button("📤 发送", type="primary", use_container_width=True, key="chat_send"):
+                    if user_msg.strip():
+                        sess["messages"].append({
+                            "role": "user",
+                            "kind": "message",
+                            "content": user_msg.strip(),
+                            "ts": _dt.now().strftime("%H:%M:%S"),
+                        })
+                        _maybe_diagnose(sess, engine)
+                        st.rerun()
+            with c2:
+                if st.button("🩺 立即辨证", use_container_width=True, key="chat_force_diag"):
+                    _finalize_diagnosis(sess, engine)
                     st.rerun()
-        else:
-            st.markdown("""
-            <div class="empty-state">
-                <div class="icon">🩺</div>
-                <div class="title">等待开始诊断</div>
-                <div class="desc">请填写左侧问诊信息，点击「开始智能诊断」</div>
-            </div>
-            """, unsafe_allow_html=True)
+
+        # 已出结果：显示诊断卡 + 保存按钮
+        if sess.get("result"):
+            _render_result_card(sess)
+            csave, cclear = st.columns(2)
+            with csave:
+                if st.button("💾 保存此次问诊", type="primary",
+                             use_container_width=True, key="chat_save"):
+                    _save_chat_session(sess)
+                    st.rerun()
+            with cclear:
+                if st.button("🔄 重新开始", use_container_width=True, key="chat_restart"):
+                    _reset_chat_session()
+                    st.rerun()
 
         st.markdown('</div>', unsafe_allow_html=True)
+
+    # ===== 按钮事件 =====
+    if start_clicked:
+        if not sess["chief_complaint"].strip():
+            st.toast("⚠️ 请先填写主诉", icon="⚠️")
+        else:
+            # 用户主动发起：把主诉+症状作为一条 user 消息
+            summary = sess["chief_complaint"]
+            if sess["symptoms"]:
+                summary += "\n伴随症状：" + "、".join(sess["symptoms"])
+            sess["messages"].append({
+                "role": "user",
+                "kind": "complaint",
+                "content": summary,
+                "ts": _dt.now().strftime("%H:%M:%S"),
+            })
+            sess["round"] += 1
+            _maybe_diagnose(sess, engine)
+            st.rerun()
+
+    if reset_clicked:
+        _reset_chat_session()
+        st.rerun()
+
+
+# ---------------------------------------------------------------------------
+# 多轮问诊 — 内部辅助函数
+# ---------------------------------------------------------------------------
+def _render_chat_history(messages):
+    """渲染聊天历史（按时间倒序: 新消息在底部）"""
+    # 简单实现：用 st.chat_message
+    for msg in messages:
+        role = msg.get("role", "user")
+        kind = msg.get("kind", "message")
+        content = msg.get("content", "")
+        ts = msg.get("ts", "")
+        with st.chat_message(name="user" if role == "user" else "assistant"):
+            if kind == "greeting":
+                st.markdown(f"**中医 AI 助手** · _{ts}_  \n\n{content}")
+            elif kind == "complaint":
+                st.markdown(f"**你** · _{ts}_  \n\n{content}")
+            elif kind == "followup_answer":
+                st.markdown(f"**你** · _{ts}_  \n\n{content}")
+            elif kind == "diagnosis":
+                # 诊断结论用卡片渲染（在 chat 内部）
+                _render_result_inline(content, ts)
+            else:
+                st.markdown(f"**{'你' if role == 'user' else 'AI'}** · _{ts}_  \n\n{content}")
+
+
+def _render_result_inline(result: Dict, ts: str):
+    """在 chat 内部紧凑地渲染诊断结果"""
+    is_ok = result.get("confidence", 0) > 0
+    cls = "" if is_ok else " fail"
+    conf = result.get("confidence", 0)
+    st.markdown(f"""
+    <div class="result-stack" style="margin-top:0.4rem">
+        <div class="result-hero{cls}" style="padding:0.9rem 1rem">
+            <div class="label">{'✅ 辨证完成' if is_ok else '❌ 辨证失败'} · {ts}</div>
+            <div class="value" style="font-size:1.3rem">🩺 {result.get('syndrome','')}</div>
+            <div class="row">
+                <div class="col">
+                    <div class="lab">辨证体系</div>
+                    <div class="val">{result.get('syndrome_category', '待分类')}</div>
+                </div>
+                <div class="col">
+                    <div class="lab">置信度</div>
+                    <div class="val">{conf}%</div>
+                    <div class="confidence-bar"><div class="fill" style="width:{min(conf,100)}%"></div></div>
+                </div>
+            </div>
+        </div>
+        <div class="result-card">
+            <div class="head">📖 辨证分析</div>
+            <div class="body">{result.get('analysis','')}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    if result.get("treatment_principle") and result["treatment_principle"] not in ("无", ""):
+        st.markdown(f"""
+        <div class="result-card">
+            <div class="head">🎯 治疗原则</div>
+            <div class="body">{result['treatment_principle']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    formula = result.get("formula", "")
+    if formula and formula not in ("无", "待推荐"):
+        st.markdown(f"""
+        <div class="result-card">
+            <div class="head">💊 推荐方剂</div>
+            <div class="formula">{formula}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    if result.get("formula_adjustment") and result["formula_adjustment"] not in ("无", ""):
+        st.markdown(f"""
+        <div class="result-card" style="border-left:3px solid var(--c-amber)">
+            <div class="head" style="color:#8B6A2E">🧩 加减建议</div>
+            <div class="body">{result['formula_adjustment']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    if result.get("additional_notes") and result["additional_notes"] not in ("无", ""):
+        st.markdown(f"""
+        <div class="result-card" style="border-left:3px solid var(--c-warning)">
+            <div class="head" style="color:#A8782E">💡 提示</div>
+            <div class="body">{result['additional_notes']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+def _render_result_card(sess):
+    """聊天窗外的最终结果卡（紧凑模式）"""
+    result = sess["result"]
+    is_ok = result.get("confidence", 0) > 0
+    cls = "" if is_ok else " fail"
+    conf = result.get("confidence", 0)
+    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="result-stack">
+        <div class="result-hero{cls}">
+            <div class="label">{'✅ 最终辨证' if is_ok else '❌ 辨证失败'}</div>
+            <div class="value">🩺 {result.get('syndrome','')}</div>
+            <div class="row">
+                <div class="col">
+                    <div class="lab">辨证体系</div>
+                    <div class="val">{result.get('syndrome_category','待分类')}</div>
+                </div>
+                <div class="col">
+                    <div class="lab">置信度</div>
+                    <div class="val">{conf}%</div>
+                    <div class="confidence-bar"><div class="fill" style="width:{min(conf,100)}%"></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def _maybe_diagnose(sess, engine):
+    """判断是否可以直接辨证，否则生成追问。"""
+    followup = engine.should_ask_followup(
+        sess["chief_complaint"], sess["symptoms"],
+        sess["tongue_sign"], sess["pulse_sign"],
+        round_count=len(sess.get("pending_questions", [])),
+    )
+    from datetime import datetime as _dt
+    if followup["need_followup"]:
+        sess["pending_questions"] = followup["questions"]
+        msg_lines = [f"为了更准确地辨证，我需要再了解几项信息："]
+        for q in followup["questions"]:
+            msg_lines.append(f"• {q['label']}")
+        sess["messages"].append({
+            "role": "assistant",
+            "kind": "followup",
+            "content": "\n".join(msg_lines),
+            "ts": _dt.now().strftime("%H:%M:%S"),
+        })
+    else:
+        _finalize_diagnosis(sess, engine)
+
+
+def _apply_followup_answer(sess, q, opt, engine):
+    """处理追问回答：把答案写回对应字段，清除该追问，再判断是否还要继续"""
+    from datetime import datetime as _dt
+    field = q["field"]
+    # 写回 session 字段
+    if field in ("tongue_sign", "pulse_sign"):
+        sess[field] = opt
+    elif field == "cold_hot":
+        if "畏寒" in opt or "寒" in opt:
+            if "畏寒" not in sess["symptoms"]:
+                sess["symptoms"].append("畏寒肢冷")
+        elif "热" in opt and "畏寒" in opt:
+            pass  # 往来寒热
+        elif "热" in opt:
+            if "畏热" not in sess["symptoms"]:
+                sess["symptoms"].append("畏热")
+    elif field == "sweat":
+        if "无汗" in opt and "无汗" not in sess["symptoms"]:
+            sess["symptoms"].append("无汗")
+        elif "自汗" in opt and "自汗" not in sess["symptoms"]:
+            sess["symptoms"].append("自汗")
+        elif "盗汗" in opt and "盗汗" not in sess["symptoms"]:
+            sess["symptoms"].append("盗汗")
+    elif field == "stool_urine":
+        if "稀溏" in opt and "腹泻" not in sess["symptoms"]:
+            sess["symptoms"].append("腹泻")
+        elif "干结" in opt and "便秘" not in sess["symptoms"]:
+            sess["symptoms"].append("便秘")
+        elif "短赤" in opt and "小便短赤" not in sess["symptoms"]:
+            sess["symptoms"].append("小便短赤")
+    # 记录用户回答
+    sess["messages"].append({
+        "role": "user",
+        "kind": "followup_answer",
+        "content": f"**{q['label']}** → {opt}",
+        "ts": _dt.now().strftime("%H:%M:%S"),
+    })
+    # 移除该 field
+    sess["pending_questions"] = [x for x in sess["pending_questions"] if x["field"] != field]
+    # 继续判断
+    if sess["pending_questions"]:
+        sess["round"] += 1
+        # 还有追问，等用户继续
+    else:
+        sess["round"] += 1
+        _finalize_diagnosis(sess, engine)
+
+
+def _finalize_diagnosis(sess, engine):
+    """输出最终辨证结果"""
+    from datetime import datetime as _dt
+    result = engine.analyze_symptoms(
+        sess["chief_complaint"], sess["symptoms"],
+        sess["tongue_sign"], sess["pulse_sign"],
+    )
+    sess["result"] = result
+    is_ok = result.get("confidence", 0) > 0
+    text = "✅ 辨证完成" if is_ok else "❌ 辨证失败"
+    sess["messages"].append({
+        "role": "assistant",
+        "kind": "diagnosis",
+        "content": result,
+        "ts": _dt.now().strftime("%H:%M:%S"),
+    })
+    # 额外附加一条简短结论
+    short = f"**{text}**\n\n**证型**：{result.get('syndrome','')}\n**方剂**：{result.get('formula','')}（置信度 {result.get('confidence',0)}%）"
+    sess["messages"].append({
+        "role": "assistant",
+        "kind": "message",
+        "content": short,
+        "ts": _dt.now().strftime("%H:%M:%S"),
+    })
+
+
+def _save_chat_session(sess):
+    """把当前会话的最终结果写入 Supabase（带 session_id）"""
+    result = sess.get("result")
+    if not result:
+        st.toast("⚠️ 暂无结果可保存", icon="⚠️")
+        return
+    record = {
+        "session_id": sess["session_id"],
+        "round_index": sess["round"],
+        "name": sess["patient"].get("name", "匿名") or "匿名",
+        "age": int(sess["patient"].get("age", 0) or 0),
+        "gender": sess["patient"].get("gender", ""),
+        "chief_complaint": sess["chief_complaint"],
+        "symptoms": sess["symptoms"],
+        "tongue_sign": sess["tongue_sign"],
+        "pulse_sign": sess["pulse_sign"],
+        "syndrome": result.get("syndrome", ""),
+        "syndrome_category": result.get("syndrome_category", ""),
+        "formula": result.get("formula", ""),
+        "formula_adjustment": result.get("formula_adjustment", ""),
+        "treatment_principle": result.get("treatment_principle", ""),
+        "analysis": result.get("analysis", ""),
+        "confidence": int(result.get("confidence", 0) or 0),
+        "source": "chat",
+        "messages": sess.get("messages", []),
+    }
+    if supabase_configured():
+        ok = _sb_save_record(record)
+        if ok:
+            st.success("✅ 已保存到云端（含完整对话）")
+        else:
+            st.error("❌ 云端保存失败")
+    else:
+        # 本地降级
+        from datetime import datetime as _dt
+        records = load_records()
+        record["id"] = len(records) + 1
+        record["date"] = _dt.now().strftime("%Y-%m-%d %H:%M:%S")
+        records.append(record)
+        save_records(records)
+        st.success("✅ 已保存到本地")
+
+
+def _reset_chat_session():
+    """重置聊天会话"""
+    st.session_state.chat_session = {}
+
+
+def _sb_save_record(record: Dict) -> bool:
+    """薄包装：调用 utils.supabase_client.save_record（缺列兼容）"""
+    from utils.supabase_client import save_record
+    return save_record(record)
 
 def render_analytics_tab():
     st.markdown("""

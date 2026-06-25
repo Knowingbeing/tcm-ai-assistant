@@ -229,6 +229,200 @@ class TCMDiagnosisEngine:
 """
         return knowledge
 
+    def chat_with_history(self, messages: List[Dict], temperature: float = 0.3,
+                          max_tokens: int = 800) -> str:
+        """多轮对话：messages = [{role: system|user|assistant, content: str}, ...]
+        返回 assistant 的纯文本回复。失败时返回错误说明字符串。
+        """
+        if not self.has_api_key:
+            return "（演示模式：未配置 API Key，无法进行 AI 对话）"
+        try:
+            # 确保第一条是 system
+            sys_prompt = next((m for m in messages if m.get("role") == "system"), None)
+            rest = [m for m in messages if m.get("role") != "system"]
+            full_messages = []
+            if sys_prompt:
+                full_messages.append(sys_prompt)
+            full_messages.extend(rest)
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=full_messages,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            return response.choices[0].message.content or ""
+        except Exception as e:
+            return f"[对话失败] {str(e)[:200]}"
+
+    def should_ask_followup(self, chief_complaint: str, symptoms: List[str],
+                            tongue_sign: str, pulse_sign: str,
+                            round_count: int = 0) -> Dict:
+        """判断是否需要追问，以及追问什么问题。
+        返回: {"need_followup": bool, "questions": [{"field": str, "label": str, "options": [str]}], "reason": str}
+        - round_count: 已追问轮数，>=2 时强制不再追问
+        - 规则：缺失舌/脉 + 症状不典型 → 追问；症状已明确 → 直接辨证
+        """
+        if round_count >= 2:
+            return {"need_followup": False, "questions": [], "reason": "已追问 2 轮"}
+
+        questions = []
+        all_text = chief_complaint + " " + " ".join(symptoms or []) + " " + tongue_sign + " " + pulse_sign
+
+        # 缺舌象
+        if not tongue_sign.strip():
+            questions.append({
+                "field": "tongue_sign",
+                "label": "舌象如何？",
+                "options": ["舌淡苔白", "舌红苔黄", "舌淡胖有齿痕", "舌紫暗有瘀点"]
+            })
+
+        # 缺脉象
+        if not pulse_sign.strip():
+            questions.append({
+                "field": "pulse_sign",
+                "label": "脉象如何？",
+                "options": ["脉浮", "脉沉", "脉数", "脉迟", "脉细", "脉弦"]
+            })
+
+        # 寒热倾向不明（关键词触发）
+        if not any(w in all_text for w in ["寒", "热", "温", "凉", "冷"]):
+            questions.append({
+                "field": "cold_hot",
+                "label": "怕冷还是怕热？",
+                "options": ["畏寒肢冷", "五心烦热", "往来寒热", "无明显偏向"]
+            })
+
+        # 汗出不明确
+        if not any(w in all_text for w in ["汗", "无汗"]):
+            questions.append({
+                "field": "sweat",
+                "label": "出汗情况？",
+                "options": ["无汗", "自汗", "盗汗", "正常"]
+            })
+
+        # 大小便不明确
+        if not any(w in all_text for w in ["便", "尿", "泻", "秘", "溏"]):
+            questions.append({
+                "field": "stool_urine",
+                "label": "大小便情况？",
+                "options": ["大便稀溏", "大便干结", "正常", "小便短赤"]
+            })
+
+        # 限制最多 2 个追问，优先问最重要的（舌/脉）
+        priority = ["tongue_sign", "pulse_sign", "cold_hot", "sweat", "stool_urine"]
+        questions.sort(key=lambda q: priority.index(q["field"]) if q["field"] in priority else 99)
+        questions = questions[:2]
+
+        if not questions:
+            return {"need_followup": False, "questions": [], "reason": "信息已充分，可直接辨证"}
+
+        return {
+            "need_followup": True,
+            "questions": questions,
+            "reason": f"还需补充 {len(questions)} 项关键四诊信息"
+        }
+
+    def diagnose_with_conversation(self, session: Dict) -> Dict:
+        """基于多轮对话的最终辨证。session 结构:
+        {
+          "chief_complaint": str,
+          "symptoms": List[str],
+          "tongue_sign": str,
+          "pulse_sign": str,
+          "conversation": [{"role": "user|assistant|system", "content": str}, ...]
+        }
+        返回: 同 analyze_symptoms 结构
+        """
+        # 把四诊信息拼成 context，附在对话最后一条 system 提示后
+        context_str = (
+            f"\n\n【四诊信息汇总】\n主诉：{session.get('chief_complaint', '')}\n"
+            f"症状：{', '.join(session.get('symptoms', [])) or '无'}\n"
+            f"舌象：{session.get('tongue_sign', '') or '未提供'}\n"
+            f"脉象：{session.get('pulse_sign', '') or '未提供'}\n"
+        )
+
+        # 直接复用 analyze_symptoms 的 prompt 模板
+        if not self.has_api_key:
+            return self._rule_based_diagnosis(
+                session.get("chief_complaint", ""),
+                session.get("symptoms", []),
+                session.get("tongue_sign", ""),
+                session.get("pulse_sign", ""),
+            )
+
+        prompt = f"""
+你是一位经验丰富的中医师，请根据以下问诊信息进行辨证论治。
+
+{context_str}
+
+请基于中医辨证理论，完成以下分析：
+
+1. 证型诊断（最准确的证型名称）
+2. 辨证分析（200字以内）
+3. 推荐方剂（最对症的经方或时方）
+4. 方剂加减（50字以内）
+5. 治疗原则
+6. 信心指数（0-100）
+7. 注意事项
+
+请严格按照以下JSON格式返回：
+{{
+    "syndrome": "证型名称",
+    "syndrome_category": "辨证体系",
+    "analysis": "辨证分析",
+    "formula": "方剂名称",
+    "formula_adjustment": "方剂加减建议",
+    "treatment_principle": "治疗原则",
+    "confidence": 信心指数数字,
+    "additional_notes": "注意事项"
+}}
+"""
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": f"你是一位中医辨证论治专家，精通《伤寒论》《金匮要略》《温病条辨》等经典。{self.knowledge_base}"},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=1500
+            )
+            result = response.choices[0].message.content
+            import json
+            return json.loads(result)
+        except Exception as e:
+            error_msg = str(e)
+            if "401" in error_msg or "invalid_api_key" in error_msg.lower():
+                return {"syndrome": "API Key 无效", "syndrome_category": "配置错误",
+                        "analysis": "你输入的 API Key 无效或已过期。",
+                        "formula": "无", "formula_adjustment": "无",
+                        "treatment_principle": "无", "confidence": 0,
+                        "additional_notes": "🔑 请检查 API Key 是否正确，或前往厂商官网重新获取。"}
+            elif "404" in error_msg or "model" in error_msg.lower():
+                return {"syndrome": "模型不存在", "syndrome_category": "配置错误",
+                        "analysis": f"选择的模型 '{self.model}' 不存在或不可用。",
+                        "formula": "无", "formula_adjustment": "无",
+                        "treatment_principle": "无", "confidence": 0,
+                        "additional_notes": "🤖 请在设置中选择其他模型，或检查厂商是否支持该模型。"}
+            elif "429" in error_msg or "rate" in error_msg.lower():
+                return {"syndrome": "请求频率超限", "syndrome_category": "限流",
+                        "analysis": "API 请求过于频繁，请稍后重试。",
+                        "formula": "无", "formula_adjustment": "无",
+                        "treatment_principle": "无", "confidence": 0,
+                        "additional_notes": "⏳ 请等待 30 秒后重试，或升级 API 套餐。"}
+            elif "connection" in error_msg.lower() or "timeout" in error_msg.lower() or "connect" in error_msg.lower():
+                return {"syndrome": "网络连接失败", "syndrome_category": "网络错误",
+                        "analysis": f"无法连接到 {self.provider} 的 API 服务器。",
+                        "formula": "无", "formula_adjustment": "无",
+                        "treatment_principle": "无", "confidence": 0,
+                        "additional_notes": f"🌐 请检查网络与 API 地址是否正确。"}
+            else:
+                return {"syndrome": "诊断失败", "syndrome_category": "未知错误",
+                        "analysis": f"AI 分析时发生错误：{error_msg[:300]}",
+                        "formula": "无", "formula_adjustment": "无",
+                        "treatment_principle": "无", "confidence": 0,
+                        "additional_notes": "请截图此错误信息并联系开发者，或尝试切换其他 API 厂商。"}
+
     def analyze_symptoms(self, chief_complaint: str, symptoms: List[str],
                         tongue_sign: str, pulse_sign: str) -> Dict:
         if not self.has_api_key:

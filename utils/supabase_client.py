@@ -119,6 +119,7 @@ def save_record(record: Dict) -> bool:
             "formula", "formula_adjustment",
             "treatment_principle", "analysis",
             "confidence", "source",
+            "session_id", "round_index", "messages",
         }
         payload = {k: v for k, v in record.items() if k in allowed}
         # symptoms 需为 list 类型
@@ -128,11 +129,67 @@ def save_record(record: Dict) -> bool:
                 payload["symptoms"] = json.loads(payload["symptoms"])
             except Exception:
                 payload["symptoms"] = []
+        # messages 同理
+        if isinstance(payload.get("messages"), str):
+            import json
+            try:
+                payload["messages"] = json.loads(payload["messages"])
+            except Exception:
+                payload["messages"] = []
         client.table("consultations").insert(payload).execute()
         return True
     except Exception as e:
         print(f"[supabase] save_record 失败：{e}")
         return False
+
+
+def get_sessions() -> List[Dict]:
+    """读取所有问诊会话（按 session_id 聚合的最新一条），按时间倒序。
+    用于"问诊历史"列表：每条只返回该 session 最新一轮的概要。
+    """
+    client = get_client()
+    if client is None:
+        return []
+    try:
+        # 拉全部，按 session_id + created_at 在内存聚合
+        resp = (
+            client.table("consultations")
+            .select("id,session_id,round_index,syndrome,formula,confidence,created_at,chief_complaint,name")
+            .order("created_at", desc=True)
+            .execute()
+        )
+        rows = resp.data or []
+        # 按 session_id 取 round_index 最大的一条
+        seen = {}
+        for r in rows:
+            sid = r.get("session_id")
+            if not sid:
+                continue
+            if sid not in seen or (r.get("round_index") or 0) > (seen[sid].get("round_index") or 0):
+                seen[sid] = r
+        return list(seen.values())
+    except Exception as e:
+        print(f"[supabase] get_sessions 失败：{e}")
+        return []
+
+
+def get_session_history(session_id: str) -> List[Dict]:
+    """读取某个 session_id 的全部记录（多轮），按 round_index 升序。"""
+    client = get_client()
+    if client is None:
+        return []
+    try:
+        resp = (
+            client.table("consultations")
+            .select("*")
+            .eq("session_id", session_id)
+            .order("round_index", desc=False)
+            .execute()
+        )
+        return resp.data or []
+    except Exception as e:
+        print(f"[supabase] get_session_history 失败：{e}")
+        return []
 
 
 def clear_records() -> bool:
