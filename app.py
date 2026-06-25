@@ -831,6 +831,8 @@ def render_settings_tab():
     """, unsafe_allow_html=True)
 
     settings = load_settings()
+    current_key = settings.get("api_key", "")
+    has_api_key = bool(current_key)
 
     st.markdown('<div class="section-container">', unsafe_allow_html=True)
     st.markdown("**🔑 API配置**")
@@ -852,7 +854,6 @@ def render_settings_tab():
 
     st.caption(f"📡 API 地址：{provider_config['base_url']}")
 
-    current_key = settings.get("api_key", "")
     api_key = st.text_input("API Key", type="password", placeholder="请输入你的 API Key", value=current_key if current_key else "")
 
     col1, col2, col3 = st.columns(3)
