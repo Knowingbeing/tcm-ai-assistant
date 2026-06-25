@@ -29,320 +29,421 @@ st.set_page_config(
 
 st.markdown("""
 <style>
+    /* ============================================
+       清新山水风格 · 中医AI智能问诊助手
+       主色：荷绿 #0F7A6A
+       辅色：琥珀 #D4A24A / 砚墨 #1F2933
+       背景：米白 #FAF8F3
+       ============================================ */
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap');
 
-    * {
-        font-family: 'Noto Sans SC', sans-serif;
+    :root {
+        --c-primary: #0F7A6A;
+        --c-primary-soft: #E6F2EF;
+        --c-primary-dark: #0A5A4D;
+        --c-amber: #D4A24A;
+        --c-amber-soft: #FBF3E3;
+        --c-ink: #1F2933;
+        --c-ink-soft: #5A6573;
+        --c-bg: #FAF8F3;
+        --c-bg-card: #FFFFFF;
+        --c-line: #EAE5D9;
+        --c-success: #4FAE7A;
+        --c-warning: #E0A24A;
+        --c-danger: #D85A5A;
+        --shadow-sm: 0 1px 2px rgba(31, 41, 51, 0.04), 0 1px 3px rgba(31, 41, 51, 0.06);
+        --shadow-md: 0 2px 6px rgba(31, 41, 51, 0.05), 0 6px 16px rgba(31, 41, 51, 0.06);
+        --shadow-lg: 0 4px 12px rgba(31, 41, 51, 0.06), 0 16px 32px rgba(31, 41, 51, 0.08);
+        --radius-sm: 8px;
+        --radius-md: 14px;
+        --radius-lg: 20px;
+        --radius-xl: 28px;
     }
 
+    html, body, .stApp, [data-testid="stAppViewContainer"], [class*="css"] {
+        font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+    }
+
+    /* ===== 全局背景：米白底 + 极淡山水纹理 ===== */
     .stApp {
-        background: linear-gradient(180deg, #F0F4F8 0%, #E2E8F0 100%);
+        background: #FAF8F3;
+        background-image:
+            radial-gradient(circle at 0% 0%, rgba(15, 122, 106, 0.04) 0%, transparent 50%),
+            radial-gradient(circle at 100% 100%, rgba(212, 162, 74, 0.05) 0%, transparent 50%);
     }
 
-    .hero-section {
-        background: linear-gradient(135deg, #0D7C66 0%, #0F9D58 50%, #10B981 100%);
-        padding: 2.5rem 3rem;
-        border-radius: 20px;
-        color: white;
-        margin-bottom: 2rem;
-        box-shadow: 0 20px 60px rgba(13, 124, 102, 0.3);
+    [data-testid="stAppViewContainer"] > .main {
+        padding-top: 1rem;
+        padding-bottom: 3rem;
+    }
+
+    /* 隐藏 streamlit 默认 header/footer/工具栏 */
+    [data-testid="stHeader"], [data-testid="stToolbar"], #MainMenu, footer { display: none !important; }
+    [data-testid="stDecoration"] { display: none !important; }
+    .viewerBadge_link__qRIco { display: none !important; }
+
+    /* ===== 顶部 Hero：横幅式品牌区 ===== */
+    .hero-wrap {
         position: relative;
+        margin-bottom: 1.6rem;
+        padding: 1.6rem 2rem;
+        background: linear-gradient(135deg, #FFFFFF 0%, #F2F1E8 100%);
+        border: 1px solid var(--c-line);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-sm);
         overflow: hidden;
     }
-
-    .hero-section::before {
+    .hero-wrap::before {
         content: '';
         position: absolute;
-        top: -50%;
-        right: -20%;
-        width: 400px;
-        height: 400px;
-        background: rgba(255,255,255,0.1);
+        top: -60px; right: -60px;
+        width: 220px; height: 220px;
+        background: radial-gradient(circle, rgba(15, 122, 106, 0.12), transparent 70%);
         border-radius: 50%;
     }
-
-    .hero-section::after {
+    .hero-wrap::after {
         content: '';
         position: absolute;
-        bottom: -30%;
-        left: -10%;
-        width: 300px;
-        height: 300px;
-        background: rgba(255,255,255,0.08);
+        bottom: -80px; right: 120px;
+        width: 180px; height: 180px;
+        background: radial-gradient(circle, rgba(212, 162, 74, 0.10), transparent 70%);
         border-radius: 50%;
     }
+    .hero-brand {
+        display: flex; align-items: center; gap: 0.9rem;
+        position: relative; z-index: 1;
+    }
+    .hero-logo {
+        width: 48px; height: 48px;
+        background: linear-gradient(135deg, #0F7A6A, #14A892);
+        border-radius: 14px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.6rem; color: white;
+        box-shadow: 0 4px 12px rgba(15, 122, 106, 0.25);
+    }
+    .hero-text h1 {
+        margin: 0 !important;
+        font-size: 1.65rem !important;
+        font-weight: 700 !important;
+        color: var(--c-ink) !important;
+        letter-spacing: -0.3px;
+    }
+    .hero-text p {
+        margin: 0.2rem 0 0 0;
+        font-size: 0.88rem;
+        color: var(--c-ink-soft);
+    }
+    .hero-tags {
+        display: flex; flex-wrap: wrap; gap: 0.5rem;
+        margin-top: 0.9rem; position: relative; z-index: 1;
+    }
+    .hero-tag {
+        font-size: 0.78rem; padding: 0.25rem 0.7rem;
+        background: var(--c-primary-soft); color: var(--c-primary-dark);
+        border-radius: 999px; font-weight: 500;
+    }
+    .hero-tag.amber { background: var(--c-amber-soft); color: #8B6A2E; }
 
-    .hero-section h1 {
-        color: white !important;
-        margin: 0;
-        font-size: 2.5rem;
-        font-weight: 700;
-        letter-spacing: -0.5px;
-        position: relative;
-        z-index: 1;
+    /* 顶部右侧状态徽章 */
+    .hero-status { position: absolute; top: 1.6rem; right: 2rem; display: flex; gap: 0.5rem; z-index: 1; }
+    .status-pill {
+        font-size: 0.75rem; padding: 0.3rem 0.7rem;
+        border-radius: 999px; font-weight: 500;
+        background: white; border: 1px solid var(--c-line);
+        display: inline-flex; align-items: center; gap: 0.35rem;
+        color: var(--c-ink-soft);
+    }
+    .status-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--c-success); }
+    .status-pill.warn .dot { background: var(--c-warning); }
+
+    /* ===== 快速入口卡片 ===== */
+    .quick-grid {
+        display: grid; grid-template-columns: repeat(4, 1fr);
+        gap: 0.9rem; margin-bottom: 1.6rem;
+    }
+    .quick-card {
+        background: white; border: 1px solid var(--c-line);
+        border-radius: var(--radius-md); padding: 1.1rem;
+        display: flex; align-items: center; gap: 0.9rem;
+        transition: all 0.25s ease; cursor: default;
+    }
+    .quick-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--c-primary); }
+    .quick-icon {
+        width: 42px; height: 42px; border-radius: 12px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.3rem; flex-shrink: 0;
+    }
+    .quick-icon.green { background: var(--c-primary-soft); color: var(--c-primary-dark); }
+    .quick-icon.amber { background: var(--c-amber-soft); color: #8B6A2E; }
+    .quick-icon.blue { background: #E8EFF7; color: #3A6B9E; }
+    .quick-icon.purple { background: #EFE6F2; color: #7A4E8C; }
+    .quick-info .label { font-size: 0.78rem; color: var(--c-ink-soft); }
+    .quick-info .value { font-size: 1.15rem; font-weight: 600; color: var(--c-ink); }
+
+    /* ===== 通用卡片 / 容器 ===== */
+    .card {
+        background: var(--c-bg-card);
+        border: 1px solid var(--c-line);
+        border-radius: var(--radius-md);
+        padding: 1.4rem;
+        margin-bottom: 1.2rem;
+        box-shadow: var(--shadow-sm);
+    }
+    .card-title {
+        display: flex; align-items: center; gap: 0.6rem;
+        font-size: 1.02rem; font-weight: 600; color: var(--c-ink);
+        margin: 0 0 1rem 0; padding-bottom: 0.8rem;
+        border-bottom: 1px solid var(--c-line);
+    }
+    .card-title .ti {
+        width: 28px; height: 28px; border-radius: 8px;
+        background: var(--c-primary-soft); color: var(--c-primary-dark);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 0.95rem;
     }
 
-    .hero-section .subtitle {
-        color: rgba(255,255,255,0.95);
-        margin: 0.8rem 0 0 0;
-        font-size: 1.1rem;
-        font-weight: 300;
-        position: relative;
-        z-index: 1;
-    }
-
-    .hero-section .badge {
-        display: inline-block;
-        background: rgba(255,255,255,0.2);
-        padding: 0.3rem 0.8rem;
-        border-radius: 20px;
-        font-size: 0.85rem;
-        margin-top: 1rem;
-        backdrop-filter: blur(10px);
-        position: relative;
-        z-index: 1;
-    }
-
-    .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 1rem;
-        margin-bottom: 1.5rem;
-    }
-
-    .stat-card {
+    /* ===== Tabs 横向导航条（sticky） ===== */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 0;
         background: white;
-        padding: 1.5rem;
-        border-radius: 16px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.06);
-        border: 1px solid rgba(0,0,0,0.04);
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        position: relative;
-        overflow: hidden;
+        padding: 0.4rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--c-line);
+        box-shadow: var(--shadow-sm);
+        position: sticky; top: 0; z-index: 50;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 42px; padding: 0 1.1rem;
+        border-radius: 10px; font-weight: 500;
+        color: var(--c-ink-soft); background: transparent;
+        border: none; transition: all 0.2s ease;
+        font-size: 0.92rem;
+    }
+    .stTabs [data-baseweb="tab"]:hover {
+        color: var(--c-primary);
+        background: var(--c-primary-soft);
+    }
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, #0F7A6A, #14A892) !important;
+        color: white !important;
+        box-shadow: 0 2px 8px rgba(15, 122, 106, 0.3);
+    }
+    div[data-baseweb="tab-panel"] { padding-top: 1.2rem; }
+
+    /* ===== 按钮 ===== */
+    .stButton>button {
+        background: linear-gradient(135deg, #0F7A6A 0%, #14A892 100%);
+        color: white; border: none;
+        border-radius: 10px; padding: 0.6rem 1.4rem;
+        font-weight: 500; font-size: 0.92rem;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 6px rgba(15, 122, 106, 0.2);
+    }
+    .stButton>button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(15, 122, 106, 0.3);
+    }
+    .stButton>button:active { transform: translateY(0); }
+    .stButton>button:focus { outline: none; box-shadow: 0 0 0 3px rgba(15, 122, 106, 0.2); }
+    .stButton>button:disabled {
+        background: #D8D4C7; color: #918A7A; box-shadow: none; transform: none;
     }
 
-    .stat-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 12px 40px rgba(0,0,0,0.12);
+    /* 次要按钮（用 key 后缀识别） */
+    .stButton>button[kind="secondary"] {
+        background: white; color: var(--c-ink);
+        border: 1px solid var(--c-line);
+        box-shadow: none;
+    }
+    .stButton>button[kind="secondary"]:hover {
+        background: var(--c-primary-soft); color: var(--c-primary-dark);
+        border-color: var(--c-primary);
     }
 
-    .stat-card::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 4px;
-        height: 100%;
-        background: linear-gradient(180deg, #0D7C66 0%, #10B981 100%);
-        border-radius: 0 4px 4px 0;
+    /* ===== 指标卡 ===== */
+    div[data-testid="stMetric"] {
+        background: white; padding: 1.1rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--c-line);
+        box-shadow: var(--shadow-sm);
+    }
+    div[data-testid="stMetric"] label {
+        color: var(--c-ink-soft) !important;
+        font-weight: 500 !important; font-size: 0.82rem !important;
+    }
+    div[data-testid="stMetric"] [data-testid="stMetricValue"] {
+        color: var(--c-ink) !important;
+        font-weight: 700 !important; font-size: 1.5rem !important;
     }
 
-    .stat-card .icon {
-        font-size: 2rem;
+    /* ===== 输入控件 ===== */
+    .stTextInput>div>div>input,
+    .stTextArea>div>div>textarea,
+    .stSelectbox>div>div,
+    .stMultiSelect>div>div,
+    .stNumberInput>div>div>input {
+        border-radius: 10px !important;
+        border: 1.5px solid var(--c-line) !important;
+        background: white;
+        transition: all 0.2s ease;
+    }
+    .stTextInput>div>div>input:focus,
+    .stTextArea>div>div>textarea:focus,
+    .stNumberInput>div>div>input:focus {
+        border-color: var(--c-primary) !important;
+        box-shadow: 0 0 0 3px rgba(15, 122, 106, 0.1) !important;
+    }
+    .stTextInput>label, .stTextArea>label,
+    .stSelectbox>label, .stMultiSelect>label,
+    .stNumberInput>label { color: var(--c-ink) !important; font-weight: 500 !important; }
+
+    /* ===== 提示类 ===== */
+    .stSuccess, .stError, .stWarning, .stInfo {
+        border-radius: 10px; border-left-width: 3px;
+    }
+    .stSuccess { background: #ECF7F1; border-left-color: var(--c-success); }
+    .stError { background: #FCEAEA; border-left-color: var(--c-danger); }
+    .stWarning { background: #FCF3E1; border-left-color: var(--c-amber); }
+    .stInfo { background: #EAF1F7; border-left-color: #3A6B9E; }
+
+    /* ===== 展开器 ===== */
+    .streamlit-expanderHeader, [data-testid="stExpander"] details summary {
+        background: white !important;
+        border: 1px solid var(--c-line) !important;
+        border-radius: 10px !important;
+        font-weight: 500 !important; color: var(--c-ink) !important;
+        transition: all 0.2s ease;
+    }
+    [data-testid="stExpander"] details summary:hover {
+        background: var(--c-primary-soft) !important;
+        border-color: var(--c-primary) !important;
+    }
+    [data-testid="stExpander"] details[open] summary {
+        background: var(--c-primary-soft) !important;
+        border-color: var(--c-primary) !important;
+        color: var(--c-primary-dark) !important;
+        border-radius: 10px 10px 0 0 !important;
+    }
+    [data-testid="stExpander"] details > div {
+        border: 1px solid var(--c-line) !important;
+        border-top: none !important;
+        border-radius: 0 0 10px 10px !important;
+    }
+
+    /* ===== 知识库 grid 卡片 ===== */
+    .grid {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 1rem;
+    }
+    .grid-card {
+        background: white; border: 1px solid var(--c-line);
+        border-radius: var(--radius-md); padding: 1.1rem;
+        transition: all 0.25s ease; cursor: pointer;
+        display: flex; flex-direction: column; gap: 0.5rem;
+        min-height: 130px;
+    }
+    .grid-card:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--shadow-md);
+        border-color: var(--c-primary);
+    }
+    .grid-card .head {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 0.5rem;
+    }
+    .grid-card .name {
+        font-size: 1.02rem; font-weight: 600; color: var(--c-ink);
+    }
+    .grid-card .chip {
+        font-size: 0.72rem; padding: 0.15rem 0.55rem;
+        background: var(--c-primary-soft); color: var(--c-primary-dark);
+        border-radius: 999px; font-weight: 500;
+    }
+    .grid-card .chip.amber { background: var(--c-amber-soft); color: #8B6A2E; }
+    .grid-card .meta {
+        font-size: 0.82rem; color: var(--c-ink-soft);
+        display: flex; flex-wrap: wrap; gap: 0.4rem;
+    }
+    .grid-card .meta span {
+        background: #F5F2E9; padding: 0.1rem 0.5rem; border-radius: 6px;
+    }
+    .grid-card .body { font-size: 0.85rem; color: var(--c-ink-soft); line-height: 1.5; }
+
+    /* ===== 诊断结果堆叠卡片 ===== */
+    .result-stack { display: flex; flex-direction: column; gap: 0.9rem; }
+    .result-hero {
+        background: linear-gradient(135deg, #0F7A6A 0%, #14A892 100%);
+        color: white; padding: 1.4rem 1.6rem;
+        border-radius: var(--radius-md);
+        box-shadow: 0 4px 16px rgba(15, 122, 106, 0.2);
+    }
+    .result-hero.fail {
+        background: linear-gradient(135deg, #C66 0%, #E08383 100%);
+    }
+    .result-hero .label { font-size: 0.78rem; opacity: 0.85; }
+    .result-hero .value { font-size: 1.5rem; font-weight: 700; margin-top: 0.2rem; }
+    .result-hero .row { display: flex; gap: 1.6rem; margin-top: 0.9rem; flex-wrap: wrap; }
+    .result-hero .col .lab { font-size: 0.72rem; opacity: 0.8; }
+    .result-hero .col .val { font-size: 1.05rem; font-weight: 600; margin-top: 0.1rem; }
+
+    .confidence-bar {
+        height: 6px; background: rgba(255,255,255,0.25);
+        border-radius: 3px; overflow: hidden; margin-top: 0.5rem;
+    }
+    .confidence-bar .fill {
+        height: 100%; background: white; border-radius: 3px;
+        transition: width 0.6s ease;
+    }
+
+    .result-card {
+        background: white; border: 1px solid var(--c-line);
+        border-radius: var(--radius-md); padding: 1.1rem 1.3rem;
+    }
+    .result-card .head {
+        display: flex; align-items: center; gap: 0.5rem;
+        font-size: 0.88rem; font-weight: 600; color: var(--c-primary-dark);
         margin-bottom: 0.5rem;
     }
-
-    .stat-card .value {
-        font-size: 1.8rem;
-        font-weight: 700;
-        color: #1A1A2E;
-        margin: 0;
+    .result-card .body { color: var(--c-ink); line-height: 1.6; font-size: 0.92rem; }
+    .result-card .formula {
+        font-size: 1.15rem; font-weight: 700; color: var(--c-primary);
+        margin-bottom: 0.4rem;
     }
 
-    .stat-card .label {
-        font-size: 0.85rem;
-        color: #64748B;
-        margin: 0.3rem 0 0 0;
-        font-weight: 500;
+    /* ===== 空态 ===== */
+    .empty-state {
+        text-align: center; padding: 3rem 1.5rem;
+        color: var(--c-ink-soft);
     }
+    .empty-state .icon { font-size: 3rem; opacity: 0.4; margin-bottom: 0.5rem; }
+    .empty-state .title { font-size: 1.05rem; color: var(--c-ink); margin-bottom: 0.3rem; }
+    .empty-state .desc { font-size: 0.88rem; }
 
-    .section-container {
-        background: white;
-        border-radius: 16px;
-        padding: 1.5rem;
-        margin-bottom: 1.5rem;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.04);
-        border: 1px solid rgba(0,0,0,0.04);
-    }
-
-    .section-title {
-        display: flex;
-        align-items: center;
-        gap: 0.8rem;
-        margin-bottom: 1.2rem;
-        padding-bottom: 0.8rem;
-        border-bottom: 2px solid #F1F5F9;
-    }
-
-    .section-title .icon-circle {
-        width: 40px;
-        height: 40px;
-        background: linear-gradient(135deg, #0D7C66 0%, #10B981 100%);
-        border-radius: 12px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.2rem;
-        box-shadow: 0 4px 12px rgba(13, 124, 102, 0.3);
-    }
-
-    .section-title h2 {
-        margin: 0;
-        font-size: 1.3rem;
-        font-weight: 600;
-        color: #1A1A2E;
-    }
-
-    .stButton>button {
-        background: linear-gradient(135deg, #0D7C66 0%, #10B981 100%);
-        color: white;
-        border: none;
-        border-radius: 12px;
-        padding: 0.6rem 1.8rem;
-        font-weight: 600;
-        font-size: 0.95rem;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        box-shadow: 0 4px 15px rgba(13, 124, 102, 0.3);
-    }
-
-    .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(13, 124, 102, 0.4);
-    }
-
-    .stButton>button:active {
-        transform: translateY(0);
-    }
-
-    div[data-testid="stMetric"] {
-        background: white;
-        padding: 1.2rem;
-        border-radius: 14px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.04);
-        border: 1px solid rgba(0,0,0,0.04);
-        transition: all 0.3s;
-    }
-
-    div[data-testid="stMetric"]:hover {
-        box-shadow: 0 8px 30px rgba(0,0,0,0.08);
-    }
-
-    div[data-testid="stMetric"] label {
-        color: #64748B !important;
-        font-weight: 500 !important;
-        font-size: 0.85rem !important;
-    }
-
-    div[data-testid="stMetric"] [data-testid="stMetricValue"] {
-        color: #1A1A2E !important;
-        font-weight: 700 !important;
-    }
-
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 6px;
-        background: #F1F5F9;
-        padding: 6px;
-        border-radius: 14px;
-    }
-
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 10px;
-        padding: 0.7rem 1.5rem;
-        font-weight: 500;
-        color: #64748B;
-        background: transparent;
-        border: none;
-        transition: all 0.3s;
-    }
-
-    .stTabs [data-baseweb="tab"]:hover {
-        color: #0D7C66;
-        background: rgba(13, 124, 102, 0.1);
-    }
-
-    .stTabs [aria-selected="true"] {
-        background: white !important;
-        color: #0D7C66 !important;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-    }
-
-    div[data-baseweb="tab-panel"] {
-        padding: 1rem 0;
-    }
-
-    .stTextInput>div>div>input {
-        border-radius: 10px;
-        border: 2px solid #E2E8F0;
-        padding: 0.8rem 1rem;
-        transition: all 0.3s;
-    }
-
-    .stTextInput>div>div>input:focus {
-        border-color: #0D7C66;
-        box-shadow: 0 0 0 3px rgba(13, 124, 102, 0.15);
-    }
-
-    .stTextArea>div>div>textarea {
-        border-radius: 10px;
-        border: 2px solid #E2E8F0;
-        padding: 0.8rem 1rem;
-        transition: all 0.3s;
-    }
-
-    .stTextArea>div>div>textarea:focus {
-        border-color: #0D7C66;
-        box-shadow: 0 0 0 3px rgba(13, 124, 102, 0.15);
-    }
-
-    .stSelectbox>div>div {
-        border-radius: 10px;
-    }
-
-    .stMultiSelect>div>div {
-        border-radius: 10px;
-    }
-
-    .stSuccess {
-        background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%);
-        border: 1px solid #6EE7B7;
-        border-radius: 12px;
-    }
-
-    .stError {
-        background: linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%);
-        border: 1px solid #FCA5A5;
-        border-radius: 12px;
-    }
-
-    .stWarning {
-        background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%);
-        border: 1px solid #FCD34D;
-        border-radius: 12px;
-    }
-
-    .stInfo {
-        background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%);
-        border: 1px solid #93C5FD;
-        border-radius: 12px;
-    }
-
-    .expander {
-        border-radius: 12px;
-        border: 1px solid #E2E8F0;
-        overflow: hidden;
-    }
-
-    .expander-header {
-        background: #F8FAFC;
-        padding: 1rem;
-        font-weight: 500;
-    }
-
+    /* ===== 分隔条 ===== */
     .divider {
-        height: 1px;
-        background: linear-gradient(90deg, transparent, #E2E8F0, transparent);
-        margin: 1.5rem 0;
+        height: 1px; background: var(--c-line);
+        margin: 1.2rem 0;
     }
+
+    /* ===== 数据表格 ===== */
+    .stDataFrame, [data-testid="stDataFrame"] {
+        border-radius: var(--radius-md);
+        overflow: hidden; border: 1px solid var(--c-line);
+    }
+
+    /* ===== 移动端 ===== */
+    @media (max-width: 768px) {
+        .quick-grid { grid-template-columns: repeat(2, 1fr); }
+        .hero-status { position: static; margin-top: 0.8rem; }
+        .hero-wrap { padding: 1.2rem 1.3rem; }
+        .hero-text h1 { font-size: 1.3rem !important; }
+    }
+
+    /* ===== 滚动条 ===== */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #D8D4C7; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--c-ink-soft); }
 </style>
 """, unsafe_allow_html=True)
 
@@ -438,22 +539,83 @@ def main():
     engine = get_engine()
     settings = load_settings()
     has_api_key = bool(settings.get("api_key", ""))
+    records = load_records()
+    sb_ok = supabase_configured()
+    today = datetime.now().strftime("%Y-%m-%d")
 
-    st.markdown("""
-    <div class="hero-section">
-        <h1>🏥 中医AI智能问诊助手</h1>
-        <p class="subtitle">基于大语言模型的中医智能辨证论治系统</p>
-        <span class="badge">✨ 支持六经辨证 · 脏腑辨证 · 卫气营血辨证</span>
+    # 状态徽章
+    if has_api_key and sb_ok:
+        status_pill = '<span class="status-pill"><span class="dot"></span>系统就绪</span>'
+    elif not has_api_key:
+        status_pill = '<span class="status-pill warn"><span class="dot"></span>未配置 API Key</span>'
+    elif not sb_ok:
+        status_pill = '<span class="status-pill warn"><span class="dot"></span>本地存储</span>'
+    else:
+        status_pill = '<span class="status-pill"><span class="dot"></span>运行中</span>'
+
+    today_pill = f'<span class="status-pill">{today}</span>'
+
+    st.markdown(f"""
+    <div class="hero-wrap">
+        <div class="hero-status">{status_pill}{today_pill}</div>
+        <div class="hero-brand">
+            <div class="hero-logo">🩺</div>
+            <div class="hero-text">
+                <h1>中医 AI 智能问诊助手</h1>
+                <p>传承千年岐黄之术，融合现代大语言模型，让辨证论治更轻、更准、更贴心</p>
+            </div>
+        </div>
+        <div class="hero-tags">
+            <span class="hero-tag">六经辨证</span>
+            <span class="hero-tag">脏腑辨证</span>
+            <span class="hero-tag">卫气营血</span>
+            <span class="hero-tag amber">87 味常用中药</span>
+            <span class="hero-tag amber">中医经典方剂</span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
-    if not has_api_key:
-        st.warning("⚠️ **请先配置 API Key**：前往「⚙️ 系统设置」页面输入你的 API Key，才能使用 AI 智能诊断功能。")
+    # 快速入口
+    avg_conf = 0
+    valid = [r for r in records if r.get("confidence", 0) > 0]
+    if valid:
+        avg_conf = sum(r.get("confidence", 0) for r in valid) / len(valid)
+    model_name = settings.get('model', '默认') or '默认模型'
 
-    if not supabase_configured():
-        st.info("💡 **数据持久化提示**：当前使用本地 JSON 存储，Streamlit Cloud 重启后数据会丢失。推荐配置 Supabase（详见「⚙️ 系统设置」底部）。")
+    st.markdown(f"""
+    <div class="quick-grid">
+        <div class="quick-card">
+            <div class="quick-icon green">📋</div>
+            <div class="quick-info">
+                <div class="label">总问诊数</div>
+                <div class="value">{len(records)}</div>
+            </div>
+        </div>
+        <div class="quick-card">
+            <div class="quick-icon amber">🎯</div>
+            <div class="quick-info">
+                <div class="label">平均置信度</div>
+                <div class="value">{avg_conf:.0f}%</div>
+            </div>
+        </div>
+        <div class="quick-card">
+            <div class="quick-icon blue">💾</div>
+            <div class="quick-info">
+                <div class="label">数据存储</div>
+                <div class="value" style="font-size:0.95rem">{'☁️ Supabase' if sb_ok else '💾 本地 JSON'}</div>
+            </div>
+        </div>
+        <div class="quick-card">
+            <div class="quick-icon purple">🤖</div>
+            <div class="quick-info">
+                <div class="label">AI 模型</div>
+                <div class="value" style="font-size:0.95rem">{model_name[:14]}</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 智能问诊", "📊 数据分析", "📚 知识库", "🌿 中药库", "⚙️ 系统设置"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋  智能问诊", "📊  数据分析", "📚  知识库", "🌿  中药库", "⚙️  系统设置"])
 
     with tab1:
         render_consultation_tab(engine)
@@ -468,19 +630,22 @@ def main():
 
 def render_consultation_tab(engine):
     st.markdown("""
-    <div class="section-container">
-        <div class="section-title">
-            <div class="icon-circle">📋</div>
-            <h2>智能问诊</h2>
-        </div>
+    <div class="card">
+        <div class="card-title"><div class="ti">📋</div>智能问诊</div>
+        <p style="color:var(--c-ink-soft); margin:0; font-size:0.9rem;">
+            填写患者信息与四诊资料，AI 将基于中医辨证体系给出证型与方剂建议。
+        </p>
     </div>
     """, unsafe_allow_html=True)
 
-    col1, col2 = st.columns([2, 3])
+    col1, col2 = st.columns([2, 3], gap="large")
 
     with col1:
-        st.markdown('<div class="section-container">', unsafe_allow_html=True)
-        st.markdown("**👤 患者信息**")
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown("""
+        <div class="card-title"><div class="ti">👤</div>患者信息</div>
+        """, unsafe_allow_html=True)
+
         patient_name = st.text_input("姓名", placeholder="请输入患者姓名", label_visibility="collapsed")
         col_age, col_gender = st.columns(2)
         with col_age:
@@ -489,11 +654,15 @@ def render_consultation_tab(engine):
             patient_gender = st.selectbox("性别", ["男", "女"])
 
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-        st.markdown("**📝 问诊信息**")
-        chief_complaint = st.text_area("主诉", placeholder="请描述主要症状，如：头痛、发热3天", height=120, label_visibility="collapsed")
+        st.markdown("""
+        <div class="card-title"><div class="ti">📝</div>主诉</div>
+        """, unsafe_allow_html=True)
+        chief_complaint = st.text_area("主诉描述", placeholder="例如：头痛、发热 3 天，伴恶寒、无汗", height=110, label_visibility="collapsed")
 
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-        st.markdown("**🔍 症状选择**")
+        st.markdown("""
+        <div class="card-title"><div class="ti">🔍</div>伴随症状</div>
+        """, unsafe_allow_html=True)
         all_symptoms = ["发热", "恶寒", "畏寒", "头痛", "头晕", "咳嗽", "鼻塞", "流涕",
                        "咽喉痛", "胸闷", "心悸", "腹痛", "腹泻", "便秘", "食欲不振",
                        "口渴", "口苦", "失眠", "乏力", "自汗", "盗汗", "腰膝酸软",
@@ -501,28 +670,32 @@ def render_consultation_tab(engine):
                        "面红目赤", "急躁易怒", "眩晕", "耳鸣", "多梦", "健忘",
                        "气短", "神疲", "四肢厥冷", "干咳少痰", "痰多", "痰黄稠",
                        "关节疼痛", "身热不扬", "心烦", "消渴", "刺痛", "面色晦暗"]
-        selected_symptoms = st.multiselect("选择伴随症状", all_symptoms, label_visibility="collapsed")
+        selected_symptoms = st.multiselect("选择症状", all_symptoms, label_visibility="collapsed")
 
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-        st.markdown("**👅 舌脉信息**")
+        st.markdown("""
+        <div class="card-title"><div class="ti">👅</div>舌脉</div>
+        """, unsafe_allow_html=True)
         col_tongue, col_pulse = st.columns(2)
         with col_tongue:
-            tongue_sign = st.text_input("舌象", placeholder="舌苔薄白")
+            tongue_sign = st.text_input("舌象", placeholder="如：舌苔薄白", label_visibility="collapsed")
         with col_pulse:
-            pulse_sign = st.text_input("脉象", placeholder="脉浮紧")
+            pulse_sign = st.text_input("脉象", placeholder="如：脉浮紧", label_visibility="collapsed")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col2:
-        st.markdown('<div class="section-container">', unsafe_allow_html=True)
-        st.markdown("**🤖 AI诊断结果**")
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown("""
+        <div class="card-title"><div class="ti">🤖</div>AI 辨证结果</div>
+        """, unsafe_allow_html=True)
 
-        diagnose_clicked = st.button("🔍 开始诊断", type="primary", use_container_width=True)
+        diagnose_clicked = st.button("🔍  开始智能诊断", type="primary", use_container_width=True)
 
         if diagnose_clicked:
             if not chief_complaint:
-                st.error("⚠️ 请输入主诉信息")
+                st.error("⚠️ 请先填写主诉信息")
             else:
-                with st.spinner("🔄 AI正在分析中..."):
+                with st.spinner("🔄 AI 正在辨证论治..."):
                     result = engine.analyze_symptoms(chief_complaint, selected_symptoms, tongue_sign, pulse_sign)
 
                 st.session_state.last_result = result
@@ -539,81 +712,121 @@ def render_consultation_tab(engine):
         if st.session_state.get("last_result"):
             result = st.session_state.last_result
             inp = st.session_state.get("last_input", {})
+            is_ok = result["confidence"] > 0
 
-            if result["confidence"] > 0:
-                st.success("✅ 诊断完成")
-            else:
-                st.error(f"❌ {result['syndrome']}")
+            # 顶部诊断卡片
+            hero_cls = "" if is_ok else " fail"
+            conf = result["confidence"]
+            st.markdown(f"""
+            <div class="result-stack">
+                <div class="result-hero{hero_cls}">
+                    <div class="label">{'✅ 诊断完成' if is_ok else '❌ 诊断失败'}</div>
+                    <div class="value">🩺 {result['syndrome']}</div>
+                    <div class="row">
+                        <div class="col">
+                            <div class="lab">辨证体系</div>
+                            <div class="val">{result.get('syndrome_category', '待分类')}</div>
+                        </div>
+                        <div class="col">
+                            <div class="lab">置信度</div>
+                            <div class="val">{conf}%</div>
+                            <div class="confidence-bar"><div class="fill" style="width:{min(conf,100)}%"></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # 辨证分析
+            st.markdown(f"""
+            <div class="result-card" style="margin-top:0.9rem">
+                <div class="head">📖 辨证分析</div>
+                <div class="body">{result['analysis']}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # 治疗原则
+            if result.get("treatment_principle") and result["treatment_principle"] not in ("无", ""):
+                st.markdown(f"""
+                <div class="result-card">
+                    <div class="head">🎯 治疗原则</div>
+                    <div class="body">{result['treatment_principle']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # 方剂
+            formula = result.get("formula", "")
+            if formula and formula not in ("无", "待推荐"):
+                st.markdown(f"""
+                <div class="result-card">
+                    <div class="head">💊 推荐方剂</div>
+                    <div class="formula">{formula}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                if result.get("formula_adjustment") and result["formula_adjustment"] not in ("无", ""):
+                    st.markdown(f"""
+                    <div class="result-card" style="border-left:3px solid var(--c-amber)">
+                        <div class="head" style="color:#8B6A2E">🧩 加减建议</div>
+                        <div class="body">{result['formula_adjustment']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            # 备注
+            if result.get("additional_notes") and result["additional_notes"] not in ("无", ""):
+                st.markdown(f"""
+                <div class="result-card" style="border-left:3px solid var(--c-warning)">
+                    <div class="head" style="color:#A8782E">💡 提示</div>
+                    <div class="body">{result['additional_notes']}</div>
+                </div>
+                """, unsafe_allow_html=True)
 
             st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
-            col_a, col_b = st.columns(2)
-            with col_a:
-                st.metric("🩺 诊断证型", result["syndrome"])
-                st.metric("📚 辨证体系", result.get("syndrome_category", "待分类"))
-            with col_b:
-                st.metric("💊 推荐方剂", result["formula"])
-                st.metric("📊 置信度", f"{result['confidence']}%")
-
-            st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-
-            st.markdown("**📖 辨证分析**")
-            st.info(result["analysis"])
-
-            if result.get("treatment_principle") and result["treatment_principle"] != "无":
-                st.markdown("**🎯 治疗原则**")
-                st.info(result["treatment_principle"])
-
-            if result.get("formula") and result["formula"] not in ["无", "待推荐"]:
-                st.markdown("**💊 方剂**")
-                st.info(f"**{result['formula']}**")
-                if result.get("formula_adjustment") and result["formula_adjustment"] != "无":
-                    st.warning(f"**加减建议**：{result['formula_adjustment']}")
-
-            if result.get("additional_notes"):
-                st.markdown("**💡 提示**")
-                st.warning(result["additional_notes"])
-
-            st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-
-            if st.button("💾 保存此问诊记录", type="primary", use_container_width=True, key="save_btn"):
-                new_record = {
-                    "name": inp.get("name", "匿名"),
-                    "age": inp.get("age", 0),
-                    "gender": inp.get("gender", ""),
-                    "chief_complaint": inp.get("chief_complaint", ""),
-                    "symptoms": inp.get("symptoms", []),
-                    "tongue_sign": inp.get("tongue_sign", ""),
-                    "pulse_sign": inp.get("pulse_sign", ""),
-                    "syndrome": result["syndrome"],
-                    "syndrome_category": result.get("syndrome_category", ""),
-                    "formula": result["formula"],
-                    "confidence": result["confidence"],
-                    "analysis": result["analysis"],
-                    "treatment_principle": result.get("treatment_principle", ""),
-                    "source": "manual",
-                }
-                if supabase_configured():
-                    ok = _sb_save_record(new_record)
-                    if not ok:
-                        st.error("❌ 保存到云端失败，请检查 Supabase 配置")
-                        st.stop()
-                else:
-                    records = load_records()
-                    new_record["id"] = len(records) + 1
-                    new_record["date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    records.append(new_record)
-                    save_records(records)
-                st.session_state.last_result = None
-                st.session_state.last_input = None
-                st.success("✅ 问诊记录已保存！点击「📊 数据分析」查看")
-                st.rerun()
+            col_save, col_clear = st.columns(2)
+            with col_save:
+                if st.button("💾  保存此次问诊", type="primary", use_container_width=True, key="save_btn"):
+                    new_record = {
+                        "name": inp.get("name", "匿名"),
+                        "age": inp.get("age", 0),
+                        "gender": inp.get("gender", ""),
+                        "chief_complaint": inp.get("chief_complaint", ""),
+                        "symptoms": inp.get("symptoms", []),
+                        "tongue_sign": inp.get("tongue_sign", ""),
+                        "pulse_sign": inp.get("pulse_sign", ""),
+                        "syndrome": result["syndrome"],
+                        "syndrome_category": result.get("syndrome_category", ""),
+                        "formula": result["formula"],
+                        "confidence": result["confidence"],
+                        "analysis": result["analysis"],
+                        "treatment_principle": result.get("treatment_principle", ""),
+                        "source": "manual",
+                    }
+                    if supabase_configured():
+                        ok = _sb_save_record(new_record)
+                        if not ok:
+                            st.error("❌ 保存到云端失败，请检查 Supabase 配置")
+                            st.stop()
+                    else:
+                        records_local = load_records()
+                        new_record["id"] = len(records_local) + 1
+                        new_record["date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        records_local.append(new_record)
+                        save_records(records_local)
+                    st.session_state.last_result = None
+                    st.session_state.last_input = None
+                    st.success("✅ 问诊记录已保存！点击「📊 数据分析」查看")
+                    st.rerun()
+            with col_clear:
+                if st.button("🔄  重新诊断", use_container_width=True, key="clear_btn"):
+                    st.session_state.last_result = None
+                    st.session_state.last_input = None
+                    st.rerun()
         else:
             st.markdown("""
-            <div style="text-align: center; padding: 3rem; color: #94A3B8;">
-                <p style="font-size: 3rem; margin: 0;">🩺</p>
-                <p style="font-size: 1.1rem; margin: 0.5rem 0;">请填写左侧问诊信息</p>
-                <p style="font-size: 0.9rem;">点击「开始诊断」查看 AI 分析结果</p>
+            <div class="empty-state">
+                <div class="icon">🩺</div>
+                <div class="title">等待开始诊断</div>
+                <div class="desc">请填写左侧问诊信息，点击「开始智能诊断」</div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -621,277 +834,352 @@ def render_consultation_tab(engine):
 
 def render_analytics_tab():
     st.markdown("""
-    <div class="section-container">
-        <div class="section-title">
-            <div class="icon-circle">📊</div>
-            <h2>数据分析看板</h2>
-        </div>
+    <div class="card">
+        <div class="card-title"><div class="ti">📊</div>数据分析看板</div>
+        <p style="color:var(--c-ink-soft); margin:0; font-size:0.9rem;">
+            历次问诊的可视化汇总，帮助你发现常见证型分布与系统表现。
+        </p>
     </div>
     """, unsafe_allow_html=True)
 
     records = load_records()
+    valid = [r for r in records if r.get("confidence", 0) > 0]
+    avg_conf = sum(r.get("confidence", 0) for r in valid) / len(valid) if valid else 0
 
     col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("📋 总问诊数", len(records))
-    with col2:
-        valid = [r for r in records if r.get("confidence", 0) > 0]
-        st.metric("✅ 有效诊断", len(valid))
-    with col3:
-        avg_conf = sum(r.get("confidence", 0) for r in valid) / len(valid) if valid else 0
-        st.metric("📊 平均置信度", f"{avg_conf:.1f}%")
+    with col1: st.metric("📋 总问诊数", len(records))
+    with col2: st.metric("✅ 有效诊断", len(valid))
+    with col3: st.metric("📊 平均置信度", f"{avg_conf:.1f}%")
     with col4:
-        if records:
-            st.metric("🕐 最新记录", records[-1].get("date", "")[:10])
-        else:
-            st.metric("🕐 最新记录", "无")
+        last_date = records[-1].get("date", "")[:10] if records else "无"
+        st.metric("🕐 最新记录", last_date)
 
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
     if not records:
         st.markdown("""
-        <div style="text-align: center; padding: 4rem; color: #94A3B8;">
-            <p style="font-size: 4rem; margin: 0;">📊</p>
-            <p style="font-size: 1.2rem; margin: 1rem 0;">暂无问诊记录</p>
-            <p style="font-size: 0.95rem;">请先在「📋 智能问诊」中诊断并保存记录</p>
+        <div class="empty-state">
+            <div class="icon">📊</div>
+            <div class="title">暂无问诊记录</div>
+            <div class="desc">请先在「📋 智能问诊」中诊断并保存记录</div>
         </div>
         """, unsafe_allow_html=True)
         return
 
     col_left, col_right = st.columns(2)
 
+    # 统一调色板（绿-琥珀-蓝-紫）
+    palette = ['#0F7A6A', '#D4A24A', '#3A6B9E', '#7A4E8C', '#4FAE7A', '#E0A24A', '#5A7BB8', '#9B6BA5']
+
     with col_left:
-        st.markdown('<div class="section-container">', unsafe_allow_html=True)
-        st.markdown("**🩺 证型分布**")
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown('<div class="card-title"><div class="ti">🩺</div>证型分布</div>', unsafe_allow_html=True)
         syndromes = [r["syndrome"] for r in records if r.get("confidence", 0) > 0]
         if syndromes:
             df = pd.DataFrame({"证型": syndromes}).value_counts().reset_index()
             df.columns = ["证型", "数量"]
-            fig = px.pie(df, names="证型", values="数量", color_discrete_sequence=px.colors.qualitative.Set2)
-            fig.update_traces(textposition='inside', textinfo='percent+label')
-            fig.update_layout(margin=dict(t=20, b=20, l=20, r=20), height=350)
+            fig = px.pie(df, names="证型", values="数量", color_discrete_sequence=palette)
+            fig.update_traces(textposition='inside', textinfo='percent+label', textfont_size=11)
+            fig.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=340,
+                              paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                              font=dict(family='Noto Sans SC'))
             st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col_right:
-        st.markdown('<div class="section-container">', unsafe_allow_html=True)
-        st.markdown("**📚 辨证体系分布**")
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown('<div class="card-title"><div class="ti">📚</div>辨证体系</div>', unsafe_allow_html=True)
         cats = [r.get("syndrome_category", "") for r in records if r.get("syndrome_category")]
         if cats:
             df = pd.DataFrame({"辨证体系": cats}).value_counts().reset_index()
             df.columns = ["辨证体系", "数量"]
             fig = px.bar(df, x="辨证体系", y="数量", color="辨证体系",
-                        color_discrete_sequence=px.colors.qualitative.Set2)
-            fig.update_layout(margin=dict(t=20, b=20, l=20, r=20), height=350, showlegend=False)
+                        color_discrete_sequence=palette)
+            fig.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=340, showlegend=False,
+                              paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                              font=dict(family='Noto Sans SC'))
             st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="section-container">', unsafe_allow_html=True)
-    st.markdown("**📋 问诊记录列表**")
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown(f'<div class="card-title"><div class="ti">📋</div>问诊记录 · 共 {len(records)} 条</div>', unsafe_allow_html=True)
     df_list = pd.DataFrame([{
         "日期": r.get("date", "")[:10],
         "姓名": r.get("name", ""),
-        "主诉": r.get("chief_complaint", "")[:25],
+        "主诉": r.get("chief_complaint", "")[:30],
         "证型": r.get("syndrome", ""),
         "方剂": r.get("formula", ""),
-        "置信度": f"{r.get('confidence', 0)}%"
+        "置信度": f"{r.get('confidence', 0)}%",
     } for r in reversed(records)])
-    st.dataframe(df_list, use_container_width=True, height=300)
+    st.dataframe(df_list, use_container_width=True, height=320)
     st.markdown('</div>', unsafe_allow_html=True)
 
 def render_knowledge_tab():
     st.markdown("""
-    <div class="section-container">
-        <div class="section-title">
-            <div class="icon-circle">📚</div>
-            <h2>中医知识库</h2>
-        </div>
+    <div class="card">
+        <div class="card-title"><div class="ti">📚</div>中医知识库</div>
+        <p style="color:var(--c-ink-soft); margin:0; font-size:0.9rem;">
+            涵盖经典方剂、常见证型与四大辨证体系，随时查阅。
+        </p>
     </div>
     """, unsafe_allow_html=True)
 
-    tab1, tab2, tab3 = st.tabs(["💊 方剂库", "🩺 证型库", "📖 辨证体系"])
+    tab1, tab2, tab3 = st.tabs(["💊  方剂库", "🩺  证型库", "📖  辨证体系"])
 
     with tab1:
-        st.markdown('<div class="section-container">', unsafe_allow_html=True)
+        st.markdown('<div class="card">', unsafe_allow_html=True)
 
-        col1, col2, col3 = st.columns([2, 1, 1])
+        col1, col2, col3 = st.columns([3, 1.4, 1.4])
         with col1:
-            search_formula = st.text_input("🔍 搜索方剂", placeholder="输入方剂名称...", key="formula_search", label_visibility="collapsed")
+            search_formula = st.text_input("🔍 搜索方剂", placeholder="输入方剂名称或组成...", key="formula_search", label_visibility="collapsed")
         with col2:
-            categories = list(set(f["category"] for f in FORMULAS))
-            category_filter = st.selectbox("按类别", ["全部"] + sorted(categories), key="formula_category")
+            categories = list(set(f.get("category", "") for f in FORMULAS if f.get("category")))
+            category_filter = st.selectbox("按类别", ["全部"] + sorted(categories), key="formula_category", label_visibility="collapsed")
         with col3:
-            sources = list(set(f["source"] for f in FORMULAS))
-            source_filter = st.selectbox("按来源", ["全部"] + sorted(sources), key="formula_source")
+            sources = list(set(f.get("source", "") for f in FORMULAS if f.get("source")))
+            source_filter = st.selectbox("按来源", ["全部"] + sorted(sources), key="formula_source", label_visibility="collapsed")
 
         filtered = FORMULAS
         if search_formula:
-            filtered = [f for f in filtered if search_formula in f["name"] or search_formula in f["composition"]]
+            filtered = [f for f in filtered if search_formula in f.get("name", "") or search_formula in f.get("composition", "")]
         if category_filter != "全部":
-            filtered = [f for f in filtered if f["category"] == category_filter]
+            filtered = [f for f in filtered if f.get("category") == category_filter]
         if source_filter != "全部":
-            filtered = [f for f in filtered if f["source"] == source_filter]
+            filtered = [f for f in filtered if f.get("source") == source_filter]
 
-        st.markdown(f"共找到 **{len(filtered)}** 个方剂")
-        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        st.markdown(f'<p style="color:var(--c-ink-soft); font-size:0.88rem; margin:0.8rem 0">共 <b style="color:var(--c-primary)">{len(filtered)}</b> 个方剂</p>', unsafe_allow_html=True)
 
-        for f in filtered:
-            with st.expander(f"📜 **{f['name']}** [{f['category']}] - {f['source']}"):
-                col_a, col_b = st.columns([1, 1])
-                with col_a:
-                    st.markdown(f"**💊 组成**：{f['composition']}")
-                    st.markdown(f"**🎯 功效**：{f['function']}")
-                with col_b:
-                    st.markdown(f"**📋 主治**：{f['indication']}")
-                    st.markdown(f"**📖 来源**：{f['source']}")
+        if not filtered:
+            st.markdown("""
+            <div class="empty-state">
+                <div class="icon">🔍</div>
+                <div class="title">未找到匹配的方剂</div>
+                <div class="desc">试试更换关键词或筛选条件</div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            cards_html = '<div class="grid">'
+            for f in filtered:
+                name = f.get("name", "未命名")
+                category = f.get("category", "")
+                source = f.get("source", "")
+                composition = f.get("composition", "")
+                function = f.get("function", "")
+                indication = f.get("indication", "")
+                cards_html += f'''
+                <div class="grid-card">
+                    <div class="head">
+                        <div class="name">📜 {name}</div>
+                    </div>
+                    <div class="meta">
+                        {f'<span class="chip">{category}</span>' if category else ''}
+                        {f'<span class="chip amber">{source}</span>' if source else ''}
+                    </div>
+                    <div class="body"><b>组成：</b>{composition}</div>
+                    <div class="body"><b>功效：</b>{function}</div>
+                    <div class="body"><b>主治：</b>{indication}</div>
+                </div>
+                '''
+            cards_html += '</div>'
+            st.markdown(cards_html, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     with tab2:
-        st.markdown('<div class="section-container">', unsafe_allow_html=True)
+        st.markdown('<div class="card">', unsafe_allow_html=True)
 
-        col1, col2 = st.columns([2, 1])
+        col1, col2 = st.columns([3, 1.4])
         with col1:
-            search_syndrome = st.text_input("🔍 搜索证型", placeholder="输入证型名称或症状...", key="syndrome_search", label_visibility="collapsed")
+            search_syndrome = st.text_input("🔍 搜索证型", placeholder="输入证型或症状...", key="syndrome_search", label_visibility="collapsed")
         with col2:
-            categories = list(set(s["category"] for s in SYNDROMES))
-            category_filter = st.selectbox("按辨证体系", ["全部"] + sorted(categories), key="syndrome_category")
+            categories = list(set(s.get("category", "") for s in SYNDROMES if s.get("category")))
+            category_filter = st.selectbox("按辨证体系", ["全部"] + sorted(categories), key="syndrome_category", label_visibility="collapsed")
 
         filtered = SYNDROMES
         if search_syndrome:
-            filtered = [s for s in filtered if search_syndrome in s["name"] or search_syndrome in s["symptoms"]]
+            filtered = [s for s in filtered if search_syndrome in s.get("name", "") or search_syndrome in s.get("symptoms", "")]
         if category_filter != "全部":
-            filtered = [s for s in filtered if s["category"] == category_filter]
+            filtered = [s for s in filtered if s.get("category") == category_filter]
 
-        st.markdown(f"共找到 **{len(filtered)}** 个证型")
-        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        st.markdown(f'<p style="color:var(--c-ink-soft); font-size:0.88rem; margin:0.8rem 0">共 <b style="color:var(--c-primary)">{len(filtered)}</b> 个证型</p>', unsafe_allow_html=True)
 
-        for s in filtered:
-            with st.expander(f"🩺 **{s['name']}** [{s['category']}]"):
-                col_a, col_b = st.columns([1, 1])
-                with col_a:
-                    st.markdown(f"**🔍 主要症状**：{s['symptoms']}")
-                    st.markdown(f"**👅 舌象**：{s['tongue']}")
-                    st.markdown(f"**🤚 脉象**：{s['pulse']}")
-                with col_b:
-                    st.markdown(f"**💊 推荐方剂**：{s['formula']}")
-                    st.markdown(f"**🎯 治法**：{s['treatment']}")
+        if not filtered:
+            st.markdown("""
+            <div class="empty-state">
+                <div class="icon">🔍</div>
+                <div class="title">未找到匹配的证型</div>
+                <div class="desc">试试更换关键词或筛选条件</div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            cards_html = '<div class="grid">'
+            for s in filtered:
+                name = s.get("name", "未命名")
+                category = s.get("category", "")
+                symptoms = s.get("symptoms", "")
+                tongue = s.get("tongue", "")
+                pulse = s.get("pulse", "")
+                formula = s.get("formula", "")
+                treatment = s.get("treatment", "")
+                cards_html += f'''
+                <div class="grid-card">
+                    <div class="head">
+                        <div class="name">🩺 {name}</div>
+                    </div>
+                    <div class="meta">{f'<span class="chip">{category}</span>' if category else ''}</div>
+                    <div class="body"><b>主要症状：</b>{symptoms}</div>
+                    <div class="body"><b>舌象：</b>{tongue}</div>
+                    <div class="body"><b>脉象：</b>{pulse}</div>
+                    <div class="body"><b>推荐方剂：</b><span style="color:var(--c-primary); font-weight:600">{formula}</span></div>
+                    <div class="body"><b>治法：</b>{treatment}</div>
+                </div>
+                '''
+            cards_html += '</div>'
+            st.markdown(cards_html, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     with tab3:
-        st.markdown('<div class="section-container">', unsafe_allow_html=True)
-        st.markdown("**📖 辨证体系说明**")
         st.markdown("""
-        ### 🔄 六经辨证（《伤寒论》）
+        <div class="card">
+            <div class="card-title"><div class="ti">📖</div>辨证体系说明</div>
 
-        六经辨证是《伤寒论》的核心辨证体系，将外感热病分为六个阶段：
+            <h3 style="color:var(--c-primary-dark); margin-top:1.2rem">🔄 六经辨证（《伤寒论》）</h3>
+            <p style="color:var(--c-ink-soft); line-height:1.7">
+            六经辨证是《伤寒论》的核心辨证体系，将外感热病分为六个阶段，是中医临床的奠基之作。
+            </p>
+            <table style="width:100%; border-collapse:collapse; margin-top:0.8rem; font-size:0.88rem">
+                <thead>
+                    <tr style="background:var(--c-primary-soft); color:var(--c-primary-dark)">
+                        <th style="padding:0.6rem; text-align:left; border-radius:8px 0 0 0">经络</th>
+                        <th style="padding:0.6rem; text-align:left">证型</th>
+                        <th style="padding:0.6rem; text-align:left">主要表现</th>
+                        <th style="padding:0.6rem; text-align:left">代表方剂</th>
+                        <th style="padding:0.6rem; text-align:left; border-radius:0 8px 0 0">病机</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr style="border-bottom:1px solid var(--c-line)"><td style="padding:0.6rem"><b>太阳</b></td><td>表证</td><td>恶寒发热、头痛身痛</td><td>麻黄汤、桂枝汤</td><td>风寒袭表</td></tr>
+                    <tr style="border-bottom:1px solid var(--c-line); background:#FBFAF4"><td style="padding:0.6rem"><b>阳明</b></td><td>里实热证</td><td>但热不寒、大汗大渴</td><td>白虎汤、承气汤</td><td>里热炽盛</td></tr>
+                    <tr style="border-bottom:1px solid var(--c-line)"><td style="padding:0.6rem"><b>少阳</b></td><td>半表半里</td><td>往来寒热、口苦咽干</td><td>小柴胡汤</td><td>枢机不利</td></tr>
+                    <tr style="border-bottom:1px solid var(--c-line); background:#FBFAF4"><td style="padding:0.6rem"><b>太阴</b></td><td>里虚寒证</td><td>腹满吐利、喜温喜按</td><td>理中丸</td><td>脾阳不振</td></tr>
+                    <tr style="border-bottom:1px solid var(--c-line)"><td style="padding:0.6rem"><b>少阴</b></td><td>心肾虚证</td><td>畏寒蜷卧或心烦不寐</td><td>四逆汤、黄连阿胶汤</td><td>心肾阳虚/阴虚</td></tr>
+                    <tr><td style="padding:0.6rem"><b>厥阴</b></td><td>寒热错杂</td><td>消渴、气上撞心</td><td>乌梅丸</td><td>阴阳对峙</td></tr>
+                </tbody>
+            </table>
 
-        | 经络 | 证型 | 主要表现 | 代表方剂 | 病机 |
-        |------|------|----------|----------|------|
-        | 太阳 | 表证 | 恶寒发热、头痛身痛 | 麻黄汤、桂枝汤 | 风寒袭表 |
-        | 阳明 | 里实热证 | 但热不寒、大汗大渴 | 白虎汤、承气汤 | 里热炽盛 |
-        | 少阳 | 半表半里证 | 往来寒热、口苦咽干 | 小柴胡汤 | 枢机不利 |
-        | 太阴 | 里虚寒证 | 腹满吐利、喜温喜按 | 理中丸 | 脾阳不振 |
-        | 少阴 | 心肾虚证 | 畏寒蜷卧或心烦不得眠 | 四逆汤、黄连阿胶汤 | 心肾阳虚/阴虚 |
-        | 厥阴 | 寒热错杂 | 消渴、气上撞心 | 乌梅丸 | 阴阳对峙 |
+            <h3 style="color:var(--c-primary-dark); margin-top:1.5rem">🏥 脏腑辨证</h3>
+            <p style="color:var(--c-ink-soft); line-height:1.7">脏腑辨证是根据脏腑的生理功能和病理特点，对疾病进行辨证的方法：</p>
+            <ul style="color:var(--c-ink); line-height:1.9">
+                <li><b>心系</b>：心气虚、心血虚、心火亢盛、心血瘀阻</li>
+                <li><b>肝系</b>：肝气郁结、肝火上炎、肝血虚、肝阳上亢</li>
+                <li><b>脾系</b>：脾气虚、脾阳虚、脾不统血、寒湿困脾、湿热蕴脾</li>
+                <li><b>肺系</b>：肺气虚、肺阴虚、风寒犯肺、风热犯肺、痰热壅肺</li>
+                <li><b>肾系</b>：肾阳虚、肾阴虚、肾精不足、肾不纳气</li>
+            </ul>
 
-        ### 🏥 脏腑辨证
-
-        脏腑辨证是根据脏腑的生理功能和病理特点，对疾病进行辨证的方法：
-
-        - **心系**：心气虚、心血虚、心火亢盛、心血瘀阻
-        - **肝系**：肝气郁结、肝火上炎、肝血虚、肝阳上亢
-        - **脾系**：脾气虚、脾阳虚、脾不统血、寒湿困脾、湿热蕴脾
-        - **肺系**：肺气虚、肺阴虚、风寒犯肺、风热犯肺、痰热壅肺
-        - **肾系**：肾阳虚、肾阴虚、肾精不足、肾不纳气
-
-        ### 🩸 气血津液辨证
-
-        - **气病**：气虚、气陷、气滞、气逆
-        - **血病**：血虚、血瘀、血热、血寒
-        - **津液病**：痰证、饮证、津亏证
-
-        ### 🌡️ 卫气营血辨证（温病学）
-
-        卫气营血辨证是温病学的核心辨证体系：
-
-        | 分期 | 病位 | 主要表现 | 治法 | 代表方剂 |
-        |------|------|----------|------|----------|
-        | 卫分 | 肌表 | 发热微恶风寒 | 辛凉解表 | 银翘散 |
-        | 气分 | 脏腑 | 壮热不恶寒 | 清气泄热 | 白虎汤 |
-        | 营分 | 营阴 | 身热夜甚、心烦 | 清营透热 | 清营汤 |
-        | 血分 | 血分 | 出血、发斑 | 凉血散血 | 犀角地黄汤 |
-
-        ### 📝 辨证论治流程
-
-        1. **四诊合参**：望、闻、问、切收集病情资料
-        2. **八纲辨证**：确定表里、寒热、虚实、阴阳
-        3. **脏腑辨证**：定位到具体脏腑
-        4. **确定证型**：综合判断，确定证型
-        5. **确定治法**：根据证型确定治疗原则
-        6. **选方用药**：根据治法选择方剂，随证加减
-        """)
-        st.markdown('</div>', unsafe_allow_html=True)
+            <h3 style="color:var(--c-primary-dark); margin-top:1.5rem">🌡️ 卫气营血辨证（温病学）</h3>
+            <table style="width:100%; border-collapse:collapse; margin-top:0.8rem; font-size:0.88rem">
+                <thead>
+                    <tr style="background:var(--c-amber-soft); color:#8B6A2E">
+                        <th style="padding:0.6rem; text-align:left; border-radius:8px 0 0 0">分期</th>
+                        <th style="padding:0.6rem; text-align:left">病位</th>
+                        <th style="padding:0.6rem; text-align:left">主要表现</th>
+                        <th style="padding:0.6rem; text-align:left">治法</th>
+                        <th style="padding:0.6rem; text-align:left; border-radius:0 8px 0 0">代表方剂</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr style="border-bottom:1px solid var(--c-line)"><td style="padding:0.6rem"><b>卫分</b></td><td>肌表</td><td>发热微恶风寒</td><td>辛凉解表</td><td>银翘散</td></tr>
+                    <tr style="border-bottom:1px solid var(--c-line); background:#FBFAF4"><td style="padding:0.6rem"><b>气分</b></td><td>脏腑</td><td>壮热不恶寒</td><td>清气泄热</td><td>白虎汤</td></tr>
+                    <tr style="border-bottom:1px solid var(--c-line)"><td style="padding:0.6rem"><b>营分</b></td><td>营阴</td><td>身热夜甚、心烦</td><td>清营透热</td><td>清营汤</td></tr>
+                    <tr><td style="padding:0.6rem"><b>血分</b></td><td>血分</td><td>出血、发斑</td><td>凉血散血</td><td>犀角地黄汤</td></tr>
+                </tbody>
+            </table>
+        </div>
+        """, unsafe_allow_html=True)
 
 def render_herb_tab():
     st.markdown("""
-    <div class="section-container">
-        <div class="section-title">
-            <div class="icon-circle">🌿</div>
-            <h2>中药库</h2>
-        </div>
+    <div class="card">
+        <div class="card-title"><div class="ti">🌿</div>中药库</div>
+        <p style="color:var(--c-ink-soft); margin:0; font-size:0.9rem;">
+            按药性、药味、归经筛选常用中药，支持搜索定位。
+        </p>
     </div>
     """, unsafe_allow_html=True)
 
-    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+
+    col1, col2, col3, col4 = st.columns([3, 1.4, 1.4, 1.4])
     with col1:
         search = st.text_input("🔍 搜索中药", placeholder="输入药名搜索...", label_visibility="collapsed")
     with col2:
-        natures = sorted(list(set(h["nature"] for h in HERBS)))
-        nature_filter = st.selectbox("药性", ["全部"] + natures)
+        natures = sorted(list(set(h.get("nature", "") for h in HERBS if h.get("nature"))))
+        nature_filter = st.selectbox("药性", ["全部"] + natures, label_visibility="collapsed")
     with col3:
-        flavors = sorted(list(set(h["flavor"] for h in HERBS)))
-        flavor_filter = st.selectbox("药味", ["全部"] + flavors)
+        flavors = sorted(list(set(h.get("flavor", "") for h in HERBS if h.get("flavor"))))
+        flavor_filter = st.selectbox("药味", ["全部"] + flavors, label_visibility="collapsed")
     with col4:
-        meridians = sorted(list(set(h["meridian"] for h in HERBS)))
-        meridian_filter = st.selectbox("归经", ["全部"] + meridians)
+        meridians = sorted(list(set(h.get("meridian", "") for h in HERBS if h.get("meridian"))))
+        meridian_filter = st.selectbox("归经", ["全部"] + meridians, label_visibility="collapsed")
 
     filtered = HERBS
     if search:
-        filtered = [h for h in filtered if search in h["name"]]
+        filtered = [h for h in filtered if search in h.get("name", "")]
     if nature_filter != "全部":
-        filtered = [h for h in filtered if h["nature"] == nature_filter]
+        filtered = [h for h in filtered if h.get("nature") == nature_filter]
     if flavor_filter != "全部":
-        filtered = [h for h in filtered if flavor_filter in h["flavor"]]
+        filtered = [h for h in filtered if flavor_filter in h.get("flavor", "")]
     if meridian_filter != "全部":
-        filtered = [h for h in filtered if meridian_filter in h["meridian"]]
+        filtered = [h for h in filtered if meridian_filter in h.get("meridian", "")]
 
-    st.markdown(f"共找到 **{len(filtered)}** 味中药")
-    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+    st.markdown(f'<p style="color:var(--c-ink-soft); font-size:0.88rem; margin:0.8rem 0">共 <b style="color:var(--c-primary)">{len(filtered)}</b> 味中药</p>', unsafe_allow_html=True)
 
-    for h in filtered:
-        with st.expander(f"🌿 **{h.get('name', '未命名')}** - {h.get('nature', '—')}性 {h.get('flavor', '—')}味 | {h.get('meridian', '—')}"):
-            col_a, col_b = st.columns([1, 1])
-            with col_a:
-                st.markdown(f"**🌡️ 药性**：{h.get('nature', '—')}")
-                st.markdown(f"**👅 药味**：{h.get('flavor', '—')}")
-                st.markdown(f"**📍 归经**：{h.get('meridian', '—')}")
-                st.markdown(f"**📏 用量**：{h.get('dosage', '—')}")
-            with col_b:
-                st.markdown(f"**🎯 功效**：{h.get('function', '—')}")
-                st.markdown(f"**📋 主治**：{h.get('indication', '—')}")
-            caution = h.get('caution', '').strip()
-            if caution:
-                st.warning(f"**⚠️ 禁忌**：{caution}")
+    if not filtered:
+        st.markdown("""
+        <div class="empty-state">
+            <div class="icon">🔍</div>
+            <div class="title">未找到匹配的中药</div>
+            <div class="desc">试试更换关键词或筛选条件</div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        cards_html = '<div class="grid">'
+        for h in filtered:
+            name = h.get("name", "未命名")
+            nature = h.get("nature", "—")
+            flavor = h.get("flavor", "—")
+            meridian = h.get("meridian", "—")
+            dosage = h.get("dosage", "—")
+            function = h.get("function", "—")
+            indication = h.get("indication", "—")
+            cards_html += f'''
+            <div class="grid-card">
+                <div class="head">
+                    <div class="name">🌿 {name}</div>
+                </div>
+                <div class="meta">
+                    <span class="chip">性 {nature}</span>
+                    <span class="chip">味 {flavor}</span>
+                    <span class="chip amber">{meridian}</span>
+                </div>
+                <div class="body"><b>用量：</b>{dosage}</div>
+                <div class="body"><b>功效：</b>{function}</div>
+                <div class="body"><b>主治：</b>{indication}</div>
+            </div>
+            '''
+        cards_html += '</div>'
+        st.markdown(cards_html, unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 def render_settings_tab():
     st.markdown("""
-    <div class="section-container">
-        <div class="section-title">
-            <div class="icon-circle">⚙️</div>
-            <h2>系统设置</h2>
-        </div>
+    <div class="card">
+        <div class="card-title"><div class="ti">⚙️</div>系统设置</div>
+        <p style="color:var(--c-ink-soft); margin:0; font-size:0.9rem;">
+            配置 AI 引擎、查看数据存储状态、管理本地问诊记录。
+        </p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -899,9 +1187,10 @@ def render_settings_tab():
     current_key = settings.get("api_key", "")
     has_api_key = bool(current_key)
 
-    st.markdown('<div class="section-container">', unsafe_allow_html=True)
-    st.markdown("**🔑 API配置**")
-    st.info("💡 配置 API Key 后即可使用 AI 智能诊断功能。推荐使用 DeepSeek，价格实惠且效果好。")
+    # ===== API 配置 =====
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown('<div class="card-title"><div class="ti">🔑</div>AI 引擎配置</div>', unsafe_allow_html=True)
+    st.markdown('<p style="color:var(--c-ink-soft); font-size:0.88rem; margin:0 0 1rem 0">配置 API Key 后即可使用 AI 智能诊断功能。推荐使用 DeepSeek，价格实惠且效果好。</p>', unsafe_allow_html=True)
 
     provider_list = list(API_PROVIDERS.keys())
     current_provider = settings.get("provider", DEFAULT_PROVIDER)
@@ -923,7 +1212,7 @@ def render_settings_tab():
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button("💾 保存配置", type="primary", use_container_width=True):
+        if st.button("💾  保存配置", type="primary", use_container_width=True):
             if not api_key or len(api_key) < 10:
                 st.error("❌ 请输入有效的 API Key")
             else:
@@ -938,7 +1227,7 @@ def render_settings_tab():
                 st.success(f"✅ 配置已保存：{provider} / {model}")
                 st.rerun()
     with col2:
-        if st.button("🧪 测试连接", use_container_width=True):
+        if st.button("🧪  测试连接", use_container_width=True):
             if not api_key or len(api_key) < 10:
                 st.error("❌ 请先输入 API Key")
             else:
@@ -950,33 +1239,42 @@ def render_settings_tab():
                     else:
                         st.error(f"❌ {result.get('additional_notes', '连接失败')}")
     with col3:
-        if st.button("🗑️ 清除配置", use_container_width=True):
+        if st.button("🗑️  清除配置", use_container_width=True):
             save_settings({"api_key": "", "provider": DEFAULT_PROVIDER, "model": ""})
             st.session_state.engine = TCMDiagnosisEngine()
             st.session_state.engine_key = f"{DEFAULT_PROVIDER}:"
             st.info("已清除配置")
             st.rerun()
-
     st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="section-container">', unsafe_allow_html=True)
-    st.markdown("**📊 当前状态**")
-    if has_api_key:
-        st.success(f"🔑 已配置：{settings.get('provider', DEFAULT_PROVIDER)} / {settings.get('model', '默认模型')}")
-    else:
-        st.warning("⚠️ 未配置 API Key，无法使用 AI 智能诊断功能")
+    # ===== 系统状态 =====
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown('<div class="card-title"><div class="ti">📊</div>系统状态</div>', unsafe_allow_html=True)
 
-    if supabase_configured():
-        st.success("☁️ 数据存储：Supabase 云端（重启不丢失）")
-    else:
-        st.warning("💾 数据存储：本地 JSON（重启可能丢失，建议配置 Supabase）")
+    s1, s2 = st.columns(2)
+    with s1:
+        if has_api_key:
+            st.success(f"🔑 AI 引擎：{settings.get('provider', DEFAULT_PROVIDER)} / {settings.get('model', '默认模型')}")
+        else:
+            st.warning("⚠️ AI 引擎：未配置 API Key")
+    with s2:
+        if supabase_configured():
+            st.success("☁️ 数据存储：Supabase 云端（重启不丢失）")
+        else:
+            st.warning("💾 数据存储：本地 JSON（重启可能丢失）")
+
+    if not has_api_key:
+        st.info("💡 请先配置 API Key 才能使用 AI 智能诊断功能")
+    if not supabase_configured():
+        st.info("💡 推荐配置 Supabase 云端数据库，重启后数据不丢失（详见 `supabase/README.md`）")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="section-container">', unsafe_allow_html=True)
-    st.markdown("**🗄️ 数据管理**")
+    # ===== 数据管理 =====
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown('<div class="card-title"><div class="ti">🗄️</div>数据管理</div>', unsafe_allow_html=True)
     records = load_records()
-    st.info(f"📊 共 {len(records)} 条问诊记录")
-    if st.button("🗑️ 清空所有记录", use_container_width=True):
+    st.markdown(f'<p style="font-size:0.95rem; margin:0 0 1rem 0">当前共有 <b style="color:var(--c-primary)">{len(records)}</b> 条问诊记录</p>', unsafe_allow_html=True)
+    if st.button("🗑️  清空所有记录", use_container_width=True):
         if supabase_configured():
             ok = _sb_clear_records()
             if ok:
