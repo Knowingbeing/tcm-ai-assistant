@@ -871,18 +871,19 @@ def render_herb_tab():
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
     for h in filtered:
-        with st.expander(f"🌿 **{h['name']}** - {h['nature']}性 {h['flavor']}味 | {h['meridian']}"):
+        with st.expander(f"🌿 **{h.get('name', '未命名')}** - {h.get('nature', '—')}性 {h.get('flavor', '—')}味 | {h.get('meridian', '—')}"):
             col_a, col_b = st.columns([1, 1])
             with col_a:
-                st.markdown(f"**🌡️ 药性**：{h['nature']}")
-                st.markdown(f"**👅 药味**：{h['flavor']}")
-                st.markdown(f"**📍 归经**：{h['meridian']}")
-                st.markdown(f"**📏 用量**：{h['dosage']}")
+                st.markdown(f"**🌡️ 药性**：{h.get('nature', '—')}")
+                st.markdown(f"**👅 药味**：{h.get('flavor', '—')}")
+                st.markdown(f"**📍 归经**：{h.get('meridian', '—')}")
+                st.markdown(f"**📏 用量**：{h.get('dosage', '—')}")
             with col_b:
-                st.markdown(f"**🎯 功效**：{h['function']}")
-                st.markdown(f"**📋 主治**：{h['indication']}")
-            if h.get("caution"):
-                st.warning(f"**⚠️ 禁忌**：{h['caution']}")
+                st.markdown(f"**🎯 功效**：{h.get('function', '—')}")
+                st.markdown(f"**📋 主治**：{h.get('indication', '—')}")
+            caution = h.get('caution', '').strip()
+            if caution:
+                st.warning(f"**⚠️ 禁忌**：{caution}")
 
 def render_settings_tab():
     st.markdown("""

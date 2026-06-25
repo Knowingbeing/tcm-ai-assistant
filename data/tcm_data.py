@@ -254,7 +254,7 @@ HERBS = [
     # 安神药
     {"name": "酸枣仁", "nature": "平", "flavor": "甘、酸", "meridian": "心、肝、胆", "function": "养心补肝、宁心安神、敛汗生津", "indication": "虚烦不眠、惊悸多梦", "dosage": "9-15g", "caution": "有实邪郁火者慎用"},
     {"name": "远志", "nature": "温", "flavor": "苦、辛", "meridian": "心、肾、肺", "function": "安神益智、祛痰消肿", "indication": "失眠多梦、健忘惊悸", "dosage": "3-10g", "caution": "胃炎及溃疡者慎用"},
-    {"name": "柏子仁", "nature": "平", "flavor": "甘", "meridian": "心、肾、大肠", "function": "养心安神、润肠通便", "indation": "心悸失眠、肠燥便秘", "dosage": "6-12g", "caution": "便溏者慎用"},
+    {"name": "柏子仁", "nature": "平", "flavor": "甘", "meridian": "心、肾、大肠", "function": "养心安神、润肠通便", "indication": "心悸失眠、肠燥便秘", "dosage": "6-12g", "caution": "便溏者慎用"},
 
     # 平肝息风药
     {"name": "天麻", "nature": "平", "flavor": "甘", "meridian": "肝", "function": "息风止痉、平抑肝阳、祛风通络", "indication": "头痛眩晕、肢体麻木", "dosage": "3-10g", "caution": "气血虚弱"},
