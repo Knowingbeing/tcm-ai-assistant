@@ -259,14 +259,14 @@ class TCMDiagnosisEngine:
                             round_count: int = 0) -> Dict:
         """判断是否需要追问，以及追问什么问题。
         返回: {"need_followup": bool, "questions": [{"field": str, "label": str, "options": [str]}], "reason": str}
-        - round_count: 已追问轮数，>=2 时强制不再追问
+        - round_count: 已追问轮数，>=2 时强制不再追问（收尾）
         - 规则：缺失舌/脉 + 症状不典型 → 追问；症状已明确 → 直接辨证
         """
         if round_count >= 2:
-            return {"need_followup": False, "questions": [], "reason": "已追问 2 轮"}
+            return {"need_followup": False, "questions": [], "reason": "已追问 2 轮，强制收尾"}
 
         questions = []
-        all_text = chief_complaint + " " + " ".join(symptoms or []) + " " + tongue_sign + " " + pulse_sign
+        all_text = (chief_complaint or "") + " " + " ".join(symptoms or []) + " " + (tongue_sign or "") + " " + (pulse_sign or "")
 
         # 缺舌象
         if not tongue_sign.strip():

@@ -1019,17 +1019,39 @@ def _render_result_card(sess):
 
 def _maybe_diagnose(sess, engine):
     """判断是否可以直接辨证，否则生成追问。"""
-    followup = engine.should_ask_followup(
-        sess["chief_complaint"], sess["symptoms"],
-        sess["tongue_sign"], sess["pulse_sign"],
-        round_count=len(sess.get("pending_questions", [])),
-    )
+    # 防御：engine 不可用时直接走规则辨证
+    if engine is None or not hasattr(engine, "should_ask_followup"):
+        _finalize_diagnosis(sess, engine)
+        return
+    # 修正：round_count 是"已追问过的轮数"，用 sess["round"] 才是对的
+    # （旧的 len(pending_questions) 语义错乱，会让第二轮立刻强制收尾）
+    try:
+        followup = engine.should_ask_followup(
+            sess["chief_complaint"], sess["symptoms"],
+            sess["tongue_sign"], sess["pulse_sign"],
+            round_count=sess.get("round", 0),
+        )
+    except Exception as e:
+        # 追问判断失败 → 直接收尾
+        from datetime import datetime as _dt
+        sess["messages"].append({
+            "role": "assistant",
+            "kind": "message",
+            "content": f"⚠️ 追问判断异常：{str(e)[:120]}，将直接进行辨证。",
+            "ts": _dt.now().strftime("%H:%M:%S"),
+        })
+        _finalize_diagnosis(sess, engine)
+        return
     from datetime import datetime as _dt
-    if followup["need_followup"]:
-        sess["pending_questions"] = followup["questions"]
+    if not followup or not isinstance(followup, dict):
+        _finalize_diagnosis(sess, engine)
+        return
+    if followup.get("need_followup"):
+        sess["pending_questions"] = followup.get("questions", []) or []
         msg_lines = [f"为了更准确地辨证，我需要再了解几项信息："]
-        for q in followup["questions"]:
-            msg_lines.append(f"• {q['label']}")
+        for q in sess["pending_questions"]:
+            label = q.get("label", str(q))
+            msg_lines.append(f"• {label}")
         sess["messages"].append({
             "role": "assistant",
             "kind": "followup",
@@ -1091,10 +1113,32 @@ def _apply_followup_answer(sess, q, opt, engine):
 def _finalize_diagnosis(sess, engine):
     """输出最终辨证结果"""
     from datetime import datetime as _dt
-    result = engine.analyze_symptoms(
-        sess["chief_complaint"], sess["symptoms"],
-        sess["tongue_sign"], sess["pulse_sign"],
-    )
+    # 防御：engine 不可用 → 走一个最小的兜底结果
+    if engine is None or not hasattr(engine, "analyze_symptoms"):
+        result = {
+            "syndrome": "诊断暂不可用",
+            "syndrome_category": "系统错误",
+            "analysis": "AI 引擎未就绪，请前往「系统设置」配置 API Key。",
+            "formula": "—", "formula_adjustment": "—",
+            "treatment_principle": "—", "confidence": 0,
+            "additional_notes": "💡 请先在系统设置中配置 API Key，再开始辨证。",
+        }
+    else:
+        try:
+            result = engine.analyze_symptoms(
+                sess["chief_complaint"], sess["symptoms"],
+                sess["tongue_sign"], sess["pulse_sign"],
+            )
+            if not isinstance(result, dict):
+                result = {"syndrome": "诊断失败", "syndrome_category": "未知",
+                          "analysis": str(result)[:200], "formula": "—",
+                          "formula_adjustment": "—", "treatment_principle": "—",
+                          "confidence": 0, "additional_notes": "请重试或检查 API 配置。"}
+        except Exception as e:
+            result = {"syndrome": "诊断异常", "syndrome_category": "未知错误",
+                      "analysis": f"辨证过程异常：{str(e)[:200]}", "formula": "—",
+                      "formula_adjustment": "—", "treatment_principle": "—",
+                      "confidence": 0, "additional_notes": "请稍后重试或截图联系开发者。"}
     sess["result"] = result
     is_ok = result.get("confidence", 0) > 0
     text = "✅ 辨证完成" if is_ok else "❌ 辨证失败"
@@ -1567,12 +1611,18 @@ def render_settings_tab():
                 st.error("❌ 请先输入 API Key")
             else:
                 with st.spinner("测试中..."):
-                    test_engine = TCMDiagnosisEngine(api_key, provider, model)
-                    result = test_engine.analyze_symptoms("测试", [], "", "")
-                    if result.get("confidence", 0) > 0 or "失败" not in result.get("syndrome", ""):
-                        st.success("✅ 连接成功！")
-                    else:
-                        st.error(f"❌ {result.get('additional_notes', '连接失败')}")
+                    try:
+                        test_engine = TCMDiagnosisEngine(api_key, provider, model)
+                        if not getattr(test_engine, "has_api_key", False):
+                            st.error("❌ 客户端初始化失败，请检查 API Key 与网络")
+                        else:
+                            result = test_engine.analyze_symptoms("测试主诉：头痛", [], "", "")
+                            if isinstance(result, dict) and (result.get("confidence", 0) > 0 or "失败" not in result.get("syndrome", "")):
+                                st.success("✅ 连接成功！")
+                            else:
+                                st.error(f"❌ {result.get('additional_notes', '连接失败')}")
+                    except Exception as e:
+                        st.error(f"❌ 测试异常：{str(e)[:160]}")
     with col3:
         if st.button("🗑️  清除配置", use_container_width=True):
             save_settings({"api_key": "", "provider": DEFAULT_PROVIDER, "model": ""})
