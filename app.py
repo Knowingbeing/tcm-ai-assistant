@@ -582,8 +582,13 @@ def main():
     if "_api_key_ok" not in st.session_state:
         st.session_state._api_key_ok = False
     engine = get_engine()
-    # _api_key_ok：session_state 标志位，保存后立即写入，UI 同步刷新，不依赖网络探测
-    has_api_key = st.session_state._api_key_ok
+    # ★ 三路判定：保存标志位 / engine 对象 / 磁盘 settings — 任一为真即「已配置」
+    _disk_key = (load_settings().get("api_key") or "").strip()
+    has_api_key = (
+        st.session_state._api_key_ok
+        or bool(getattr(engine, "has_api_key", False))
+        or bool(_disk_key and len(_disk_key) >= 10)
+    )
     settings = load_settings()
     records = load_records()
     sb_ok = supabase_configured()
@@ -1746,8 +1751,14 @@ def render_settings_tab():
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown('<div class="card-title"><div class="ti">📊</div>系统状态</div>', unsafe_allow_html=True)
 
+    # ★ 三路判定：engine 对象 / 保存标志位 / 当前输入框值 — 任一为真即「已配置」
     _cur_engine = st.session_state.get("engine")
-    _engine_ok = bool(getattr(_cur_engine, "has_api_key", False)) or st.session_state.get("_api_key_ok", False)
+    _widget_key_ok = bool(api_key and len(api_key.strip()) >= 10)
+    _engine_ok = (
+        bool(getattr(_cur_engine, "has_api_key", False))
+        or st.session_state.get("_api_key_ok", False)
+        or _widget_key_ok
+    )
 
     s1, s2 = st.columns(2)
     with s1:
