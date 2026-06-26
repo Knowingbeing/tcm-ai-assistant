@@ -27,6 +27,13 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# 强制 UTF-8 编码声明（防止某些浏览器/中间代理把中文当 Latin-1 渲染）
+st.markdown(
+    '<meta charset="utf-8">'
+    '<meta http-equiv="Content-Type" content="text/html; charset=utf-8">',
+    unsafe_allow_html=True,
+)
+
 st.markdown("""
 <style>
     /* ============================================
@@ -570,8 +577,10 @@ def main():
     if "chat_session" not in st.session_state:
         st.session_state.chat_session = {}
     engine = get_engine()
+    # 以 engine 的真实状态为唯一真相源（解决"配了 key 但仍显示未配置"的问题）
+    has_api_key = bool(getattr(engine, "has_api_key", False))
+    # settings 仍读取（用于显示厂商/模型名），但 key 是否有效只看 engine
     settings = load_settings()
-    has_api_key = bool(settings.get("api_key", ""))
     records = load_records()
     sb_ok = supabase_configured()
     today = datetime.now().strftime("%Y-%m-%d")
@@ -870,14 +879,26 @@ def render_consultation_tab(engine):
             _render_result_card(sess)
             csave, cclear = st.columns(2)
             with csave:
-                if st.button("💾 保存此次问诊", type="primary",
-                             use_container_width=True, key="chat_save"):
-                    _save_chat_session(sess)
-                    st.rerun()
+                if sess.get("saved"):
+                    st.success("✅ 本次问诊已保存")
+                    if st.button("🔄 再次保存", use_container_width=True, key="chat_save_again"):
+                        sess["saved"] = False
+                        st.rerun()
+                else:
+                    if st.button("💾 保存此次问诊", type="primary",
+                                 use_container_width=True, key="chat_save"):
+                        _save_chat_session(sess)
+                        st.rerun()
             with cclear:
                 if st.button("🔄 重新开始", use_container_width=True, key="chat_restart"):
                     _reset_chat_session()
                     st.rerun()
+        elif sess.get("messages") and len(sess["messages"]) > 1:
+            # 即使没结果，只要发起了对话就允许"保存草稿"
+            st.info("💡 当前尚未生成辨证结果，可继续追问，或先保存草稿")
+            if st.button("💾 保存对话草稿", use_container_width=True, key="chat_save_draft"):
+                _save_draft_session(sess)
+                st.rerun()
 
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -1184,10 +1205,12 @@ def _save_chat_session(sess):
         "source": "chat",
         "messages": sess.get("messages", []),
     }
+    saved = False
     if supabase_configured():
         ok = _sb_save_record(record)
         if ok:
             st.success("✅ 已保存到云端（含完整对话）")
+            saved = True
         else:
             st.error("❌ 云端保存失败")
     else:
@@ -1197,8 +1220,54 @@ def _save_chat_session(sess):
         record["id"] = len(records) + 1
         record["date"] = _dt.now().strftime("%Y-%m-%d %H:%M:%S")
         records.append(record)
-        save_records(records)
-        st.success("✅ 已保存到本地")
+        try:
+            save_records(records)
+            st.success(f"✅ 已保存到本地（当前共 {len(records)} 条）")
+            saved = True
+        except Exception as e:
+            st.error(f"❌ 本地保存失败：{str(e)[:120]}")
+    if saved:
+        sess["saved"] = True
+        # 清除 streamlit 缓存，确保下次进入「数据分析」读到最新数据
+        st.cache_data.clear() if hasattr(st, "cache_data") else None
+
+
+def _save_draft_session(sess):
+    """保存未完成对话的草稿（含对话历史但无诊断结果）"""
+    record = {
+        "session_id": sess.get("session_id", ""),
+        "round_index": sess.get("round", 0),
+        "name": sess.get("patient", {}).get("name", "匿名") or "匿名",
+        "age": int(sess.get("patient", {}).get("age", 0) or 0),
+        "gender": sess.get("patient", {}).get("gender", ""),
+        "chief_complaint": sess.get("chief_complaint", ""),
+        "symptoms": sess.get("symptoms", []),
+        "tongue_sign": sess.get("tongue_sign", ""),
+        "pulse_sign": sess.get("pulse_sign", ""),
+        "syndrome": "(未完成)",
+        "syndrome_category": "(草稿)",
+        "formula": "—", "formula_adjustment": "—",
+        "treatment_principle": "—", "analysis": "对话进行中，未生成辨证",
+        "confidence": 0,
+        "source": "draft",
+        "messages": sess.get("messages", []),
+    }
+    if supabase_configured():
+        if _sb_save_record(record):
+            st.success("✅ 草稿已保存到云端")
+        else:
+            st.error("❌ 云端保存失败")
+    else:
+        from datetime import datetime as _dt
+        records = load_records()
+        record["id"] = len(records) + 1
+        record["date"] = _dt.now().strftime("%Y-%m-%d %H:%M:%S")
+        records.append(record)
+        try:
+            save_records(records)
+            st.success(f"✅ 草稿已保存到本地（共 {len(records)} 条）")
+        except Exception as e:
+            st.error(f"❌ 保存失败：{str(e)[:120]}")
 
 
 def _reset_chat_session():
@@ -1212,14 +1281,22 @@ def _sb_save_record(record: Dict) -> bool:
     return save_record(record)
 
 def render_analytics_tab():
-    st.markdown("""
-    <div class="card">
-        <div class="card-title"><div class="ti">📊</div>数据分析看板</div>
-        <p style="color:var(--c-ink-soft); margin:0; font-size:0.9rem;">
-            历次问诊的可视化汇总，帮助你发现常见证型分布与系统表现。
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    # 顶部卡片 + 刷新按钮
+    ctitle, cbtn = st.columns([6, 1])
+    with ctitle:
+        st.markdown("""
+        <div class="card">
+            <div class="card-title"><div class="ti">📊</div>数据分析看板</div>
+            <p style="color:var(--c-ink-soft); margin:0; font-size:0.9rem;">
+                历次问诊的可视化汇总，帮助你发现常见证型分布与系统表现。
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+    with cbtn:
+        st.markdown('<div style="height:1.6rem"></div>', unsafe_allow_html=True)
+        if st.button("🔄 刷新", use_container_width=True, key="analytics_refresh"):
+            st.cache_data.clear() if hasattr(st, "cache_data") else None
+            st.rerun()
 
     records = load_records()
     valid = [r for r in records if r.get("confidence", 0) > 0]
@@ -1492,16 +1569,19 @@ def render_herb_tab():
 
     col1, col2, col3, col4 = st.columns([3, 1.4, 1.4, 1.4])
     with col1:
-        search = st.text_input("🔍 搜索中药", placeholder="输入药名搜索...", label_visibility="collapsed")
+        search = st.text_input("🔍 搜索中药", placeholder="输入药名搜索...", key="herb_search_v2", label_visibility="collapsed")
     with col2:
         natures = sorted(list(set(h.get("nature", "") for h in HERBS if h.get("nature"))))
-        nature_filter = st.selectbox("药性", ["全部"] + natures, label_visibility="collapsed")
+        nature_filter = st.selectbox("药性", ["全部"] + natures, key="herb_nature_v2", label_visibility="collapsed")
     with col3:
         flavors = sorted(list(set(h.get("flavor", "") for h in HERBS if h.get("flavor"))))
-        flavor_filter = st.selectbox("药味", ["全部"] + flavors, label_visibility="collapsed")
+        flavor_filter = st.selectbox("药味", ["全部"] + flavors, key="herb_flavor_v2", label_visibility="collapsed")
     with col4:
-        meridians = sorted(list(set(h.get("meridian", "") for h in HERBS if h.get("meridian"))))
-        meridian_filter = st.selectbox("归经", ["全部"] + meridians, label_visibility="collapsed")
+        # 兼容两种字段名：meridian_tropism（新）/meridian（旧）
+        def _herb_meridian(h):
+            return h.get("meridian_tropism") or h.get("meridian") or ""
+        meridians = sorted(list(set(_herb_meridian(h) for h in HERBS if _herb_meridian(h))))
+        meridian_filter = st.selectbox("归经", ["全部"] + meridians, key="herb_meridian_v2", label_visibility="collapsed")
 
     filtered = HERBS
     if search:
@@ -1511,7 +1591,7 @@ def render_herb_tab():
     if flavor_filter != "全部":
         filtered = [h for h in filtered if flavor_filter in h.get("flavor", "")]
     if meridian_filter != "全部":
-        filtered = [h for h in filtered if meridian_filter in h.get("meridian", "")]
+        filtered = [h for h in filtered if _herb_meridian(h) == meridian_filter]
 
     st.markdown(f'<p style="color:var(--c-ink-soft); font-size:0.88rem; margin:0.8rem 0">共 <b style="color:var(--c-primary)">{len(filtered)}</b> 味中药</p>', unsafe_allow_html=True)
 
@@ -1527,12 +1607,14 @@ def render_herb_tab():
         cards_html = '<div class="grid">'
         for h in filtered:
             name = h.get("name", "未命名")
-            nature = h.get("nature", "—")
-            flavor = h.get("flavor", "—")
-            meridian = h.get("meridian", "—")
-            dosage = h.get("dosage", "—")
-            function = h.get("function", "—")
-            indication = h.get("indication", "—")
+            nature = h.get("nature", "—") or "—"
+            flavor = h.get("flavor", "—") or "—"
+            meridian = _herb_meridian(h) or "—"
+            dosage = h.get("dosage", "—") or "—"
+            function = h.get("function", "—") or "—"
+            # caution 是禁忌（数据里是这个 key），不是 contraindication
+            caution = h.get("caution") or h.get("contraindication") or "—"
+            indication = h.get("indication", "—") or "—"
             cards_html += f'''
             <div class="grid-card">
                 <div class="head">
@@ -1546,6 +1628,7 @@ def render_herb_tab():
                 <div class="body"><b>用量：</b>{dosage}</div>
                 <div class="body"><b>功效：</b>{function}</div>
                 <div class="body"><b>主治：</b>{indication}</div>
+                <div class="body"><b>使用注意：</b>{caution}</div>
             </div>
             '''
         cards_html += '</div>'
@@ -1614,23 +1697,20 @@ def render_settings_tab():
                     try:
                         test_engine = TCMDiagnosisEngine(api_key, provider, model)
                         if not getattr(test_engine, "has_api_key", False):
-                            st.error("❌ 客户端初始化失败，请检查 API Key 与网络")
+                            st.error("连接失败")
                         else:
                             result = test_engine.analyze_symptoms("测试主诉：头痛", [], "", "")
                             if isinstance(result, dict):
                                 conf = result.get("confidence", 0)
-                                syn = result.get("syndrome", "")
                                 cat = result.get("syndrome_category", "")
-                                # 各种配置错误都明确告诉用户怎么修
                                 if conf > 0 and "配置错误" not in cat and "网络错误" not in cat and "限流" not in cat:
-                                    st.success(f"✅ 连接成功！{provider} 返回正常（测试证型：{syn}，置信度 {conf}%）")
+                                    st.success("连接成功")
                                 else:
-                                    st.error(f"❌ {result.get('additional_notes', '连接失败')}")
-                                    st.caption(f"诊断类别：{cat} | 详情：{result.get('analysis', '')[:200]}")
+                                    st.error("连接失败")
                             else:
-                                st.error(f"❌ 返回非预期结果：{str(result)[:200]}")
-                    except Exception as e:
-                        st.error(f"❌ 测试异常：{str(e)[:200]}")
+                                st.error("连接失败")
+                    except Exception:
+                        st.error("连接失败")
     with col3:
         if st.button("🗑️  清除配置", use_container_width=True):
             save_settings({"api_key": "", "provider": DEFAULT_PROVIDER, "model": ""})
@@ -1644,9 +1724,13 @@ def render_settings_tab():
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown('<div class="card-title"><div class="ti">📊</div>系统状态</div>', unsafe_allow_html=True)
 
+    # 以 engine 真实状态为准（避免配了 key 但仍显示"未配置"）
+    _cur_engine = st.session_state.get("engine")
+    _cur_has_key = bool(getattr(_cur_engine, "has_api_key", False))
+
     s1, s2 = st.columns(2)
     with s1:
-        if has_api_key:
+        if _cur_has_key:
             st.success(f"🔑 AI 引擎：{settings.get('provider', DEFAULT_PROVIDER)} / {settings.get('model', '默认模型')}")
         else:
             st.warning("⚠️ AI 引擎：未配置 API Key")
@@ -1656,12 +1740,12 @@ def render_settings_tab():
         else:
             st.warning("💾 数据存储：本地 JSON（重启可能丢失）")
 
-    if not has_api_key:
+    if not _cur_has_key:
         st.info("💡 请先配置 API Key 才能使用 AI 智能诊断功能")
     if not supabase_configured():
         st.info("💡 推荐配置 Supabase 云端数据库，重启后数据不丢失（详见 `supabase/README.md`）")
     # DeepSeek 常见问题提示
-    if has_api_key and settings.get("provider", "") == "DeepSeek":
+    if _cur_has_key and settings.get("provider", "") == "DeepSeek":
         cur = (current_key or "").strip()
         if not cur.startswith("sk-"):
             st.warning("⚠️ DeepSeek 的 API Key 通常以 `sk-` 开头，请确认 Key 是否完整（不要漏字符）")
