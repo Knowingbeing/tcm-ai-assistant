@@ -561,6 +561,7 @@ def save_settings(settings):
         json.dump(settings, f, ensure_ascii=False, indent=2)
 
 def get_engine():
+    """返回 AI 引擎单例；同时在 session_state 里维护 _api_key_ok 标志位供 UI 同步读取。"""
     settings = load_settings()
     api_key = settings.get("api_key", DEFAULT_API_KEY)
     provider = settings.get("provider", DEFAULT_PROVIDER)
@@ -570,20 +571,29 @@ def get_engine():
     if "engine" not in st.session_state or st.session_state.get("engine_key") != engine_key:
         st.session_state.engine = TCMDiagnosisEngine(api_key, provider, model)
         st.session_state.engine_key = engine_key
+        # 把 key 是否"形式上有效"写进标志位（不依赖网络探测，保证 UI 同步）
+        st.session_state._api_key_ok = bool(api_key and len(api_key) >= 10)
     return st.session_state.engine
 
 def main():
     # 多轮问诊 — 会话状态初始化
     if "chat_session" not in st.session_state:
         st.session_state.chat_session = {}
+    if "_api_key_ok" not in st.session_state:
+        st.session_state._api_key_ok = False
     engine = get_engine()
-    # 以 engine 的真实状态为唯一真相源（解决"配了 key 但仍显示未配置"的问题）
-    has_api_key = bool(getattr(engine, "has_api_key", False))
-    # settings 仍读取（用于显示厂商/模型名），但 key 是否有效只看 engine
+    # _api_key_ok：session_state 标志位，保存后立即写入，UI 同步刷新，不依赖网络探测
+    has_api_key = st.session_state._api_key_ok
     settings = load_settings()
     records = load_records()
     sb_ok = supabase_configured()
     today = datetime.now().strftime("%Y-%m-%d")
+
+    # 模型名：优先读 session_state（保存后立即生效），其次读 settings
+    _cfg = settings
+    model_name = _cfg.get("model", "") or API_PROVIDERS.get(_cfg.get("provider", DEFAULT_PROVIDER), {}).get("default_model", "")
+    if has_api_key:
+        model_name = st.session_state.get("engine", engine).model if hasattr(engine, "model") else model_name
 
     # 状态徽章
     if has_api_key and sb_ok:
@@ -622,7 +632,6 @@ def main():
     valid = [r for r in records if r.get("confidence", 0) > 0]
     if valid:
         avg_conf = sum(r.get("confidence", 0) for r in valid) / len(valid)
-    model_name = settings.get('model', '默认') or '默认模型'
 
     st.markdown(f"""
     <div class="quick-grid">
@@ -1636,6 +1645,7 @@ def render_herb_tab():
     st.markdown('</div>', unsafe_allow_html=True)
 
 def render_settings_tab():
+    """系统设置 Tab——所有 API Key 相关显示均与当前输入同步。"""
     st.markdown("""
     <div class="card">
         <div class="card-title"><div class="ti">⚙️</div>系统设置</div>
@@ -1646,8 +1656,9 @@ def render_settings_tab():
     """, unsafe_allow_html=True)
 
     settings = load_settings()
-    current_key = settings.get("api_key", "")
-    has_api_key = bool(current_key)
+    saved_key = (settings.get("api_key") or "").strip()
+    saved_provider = settings.get("provider", DEFAULT_PROVIDER)
+    saved_model = settings.get("model", "")
 
     # ===== API 配置 =====
     st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -1655,8 +1666,7 @@ def render_settings_tab():
     st.markdown('<p style="color:var(--c-ink-soft); font-size:0.88rem; margin:0 0 1rem 0">配置 API Key 后即可使用 AI 智能诊断功能。推荐使用 DeepSeek，价格实惠且效果好。</p>', unsafe_allow_html=True)
 
     provider_list = list(API_PROVIDERS.keys())
-    current_provider = settings.get("provider", DEFAULT_PROVIDER)
-    provider_idx = provider_list.index(current_provider) if current_provider in provider_list else 0
+    provider_idx = provider_list.index(saved_provider) if saved_provider in provider_list else 0
 
     col1, col2 = st.columns(2)
     with col1:
@@ -1664,33 +1674,44 @@ def render_settings_tab():
     with col2:
         provider_config = API_PROVIDERS[provider]
         models = provider_config["models"]
-        current_model = settings.get("model", "") or provider_config["default_model"]
-        model_idx = models.index(current_model) if current_model in models else 0
+        cur_model = saved_model or provider_config["default_model"]
+        model_idx = models.index(cur_model) if cur_model in models else 0
         model = st.selectbox("选择模型", models, index=model_idx, key="cfg_model")
 
     st.caption(f"📡 API 地址：{provider_config['base_url']}")
 
-    api_key = st.text_input("API Key", type="password", placeholder="请输入你的 API Key", value=current_key if current_key else "", key="cfg_api_key")
+    # API Key 输入框（value 用已保存的值初始化；用户输入后由 widget key 自动持久化）
+    api_key = st.text_input(
+        "API Key", type="password",
+        placeholder="请输入你的 API Key（DeepSeek 以 sk- 开头）",
+        value=saved_key if saved_key else "",
+        key="cfg_api_key"
+    )
+
+    # ★ 与输入同步的状态徽章（放在输入框下方，读的是当前 widget 值）
+    _key_ok = bool(api_key and len(api_key) >= 10)
+    if _key_ok:
+        st.success("✅  API Key 格式有效（点击「保存配置」后生效）")
+    else:
+        st.warning("⚠️  请填写 API Key（长度不少于 10 个字符）")
 
     col1, col2, col3 = st.columns(3)
     with col1:
         if st.button("💾  保存配置", type="primary", use_container_width=True):
-            if not api_key or len(api_key) < 10:
+            if not _key_ok:
                 st.error("❌ 请输入有效的 API Key")
             else:
-                new_settings = {
-                    "api_key": api_key,
-                    "provider": provider,
-                    "model": model
-                }
+                new_settings = {"api_key": api_key, "provider": provider, "model": model}
                 save_settings(new_settings)
+                # 立刻更新 session_state，保证 Hero / 状态卡同步刷新
                 st.session_state.engine = TCMDiagnosisEngine(api_key, provider, model)
                 st.session_state.engine_key = f"{provider}:{api_key}"
+                st.session_state._api_key_ok = True
                 st.success(f"✅ 配置已保存：{provider} / {model}")
                 st.rerun()
     with col2:
         if st.button("🧪  测试连接", use_container_width=True):
-            if not api_key or len(api_key) < 10:
+            if not _key_ok:
                 st.error("❌ 请先输入 API Key")
             else:
                 with st.spinner("测试中..."):
@@ -1716,22 +1737,23 @@ def render_settings_tab():
             save_settings({"api_key": "", "provider": DEFAULT_PROVIDER, "model": ""})
             st.session_state.engine = TCMDiagnosisEngine()
             st.session_state.engine_key = f"{DEFAULT_PROVIDER}:"
+            st.session_state._api_key_ok = False
             st.info("已清除配置")
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # ===== 系统状态 =====
+    # ===== 系统状态（读 session_state 引擎 + 当前 widget 值，保证同步）=====
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown('<div class="card-title"><div class="ti">📊</div>系统状态</div>', unsafe_allow_html=True)
 
-    # 以 engine 真实状态为准（避免配了 key 但仍显示"未配置"）
     _cur_engine = st.session_state.get("engine")
-    _cur_has_key = bool(getattr(_cur_engine, "has_api_key", False))
+    _engine_ok = bool(getattr(_cur_engine, "has_api_key", False)) or st.session_state.get("_api_key_ok", False)
 
     s1, s2 = st.columns(2)
     with s1:
-        if _cur_has_key:
-            st.success(f"🔑 AI 引擎：{settings.get('provider', DEFAULT_PROVIDER)} / {settings.get('model', '默认模型')}")
+        if _engine_ok:
+            # 显示当前 selectbox 的值（而非磁盘快照），保证同步
+            st.success(f"🔑 AI 引擎：{provider} / {model}")
         else:
             st.warning("⚠️ AI 引擎：未配置 API Key")
     with s2:
@@ -1740,18 +1762,17 @@ def render_settings_tab():
         else:
             st.warning("💾 数据存储：本地 JSON（重启可能丢失）")
 
-    if not _cur_has_key:
+    if not _engine_ok:
         st.info("💡 请先配置 API Key 才能使用 AI 智能诊断功能")
     if not supabase_configured():
         st.info("💡 推荐配置 Supabase 云端数据库，重启后数据不丢失（详见 `supabase/README.md`）")
-    # DeepSeek 常见问题提示
-    if _cur_has_key and settings.get("provider", "") == "DeepSeek":
-        cur = (current_key or "").strip()
+    # DeepSeek Key 格式提示（用当前输入框的值判断，而非磁盘快照）
+    if _key_ok and provider == "DeepSeek":
+        cur = (api_key or "").strip()
         if not cur.startswith("sk-"):
             st.warning("⚠️ DeepSeek 的 API Key 通常以 `sk-` 开头，请确认 Key 是否完整（不要漏字符）")
         elif len(cur) < 30:
             st.warning("⚠️ API Key 看起来太短，DeepSeek Key 一般 30+ 字符，请检查是否复制完整")
-    # API 余额快速说明
     with st.expander("💳 DeepSeek API 余额 / Key 状态说明", expanded=False):
         st.markdown("""
 - **登录控制台**：[https://platform.deepseek.com/](https://platform.deepseek.com/) → 顶部右上角「API Keys」
