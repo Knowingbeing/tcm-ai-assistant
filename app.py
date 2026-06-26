@@ -484,7 +484,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-DATA_DIR = "/tmp" if os.path.exists("/tmp") else "data"
+# 数据目录：始终放在 app.py 同级目录下的 data/，不用 /tmp（Streamlit Cloud 上 /tmp 是临时的）
+_APP_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(_APP_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 RECORDS_FILE = os.path.join(DATA_DIR, "tcm_records.json")
 SETTINGS_FILE = os.path.join(DATA_DIR, "tcm_settings.json")
@@ -512,8 +514,11 @@ def _row_to_record(row: Dict) -> Dict:
     }
 
 
+@st.cache_data(ttl=30)
 def load_records():
-    """读取问诊记录：优先 Supabase，未配置时回退 JSON 文件。"""
+    """读取问诊记录：优先 Supabase，未配置时回退 JSON 文件。
+    缓存 30 秒，保存后调用 load_records.clear() 立即刷新。
+    """
     if supabase_configured():
         rows = _sb_get_records()
         return [_row_to_record(r) for r in rows]
@@ -527,13 +532,11 @@ def load_records():
 
 
 def save_records(records):
-    """保存问诊记录。Supabase 模式下走单条插入；JSON 模式保持原行为。"""
+    """保存问诊记录。Supabase 模式下走单条插入；JSON 模式直接覆盖写文件。"""
     if supabase_configured():
-        # Supabase 模式下不批量覆盖（避免误删），仅追加最新一条
-        # 上层调用约定：append 一条新记录后调用本函数
-        if records:
-            latest = records[-1]
-            _sb_save_record(latest)
+        # Supabase 模式下不批量覆盖，由上层逐条调 _sb_save_record
+        for r in records:
+            _sb_save_record(r)
         return
     with open(RECORDS_FILE, "w", encoding="utf-8") as f:
         json.dump(records, f, ensure_ascii=False, indent=2)
@@ -1230,7 +1233,7 @@ def _save_chat_session(sess):
         else:
             st.error("❌ 云端保存失败")
     else:
-        # 本地降级
+        # 本地降级：直接写文件
         from datetime import datetime as _dt
         records = load_records()
         record["id"] = len(records) + 1
@@ -1244,8 +1247,8 @@ def _save_chat_session(sess):
             st.error(f"❌ 本地保存失败：{str(e)[:120]}")
     if saved:
         sess["saved"] = True
-        # 清除 streamlit 缓存，确保下次进入「数据分析」读到最新数据
-        st.cache_data.clear() if hasattr(st, "cache_data") else None
+        # 清除 load_records 的缓存，确保数据分析 Tab 立刻读到新数据
+        load_records.clear()
 
 
 def _save_draft_session(sess):
@@ -1311,7 +1314,7 @@ def render_analytics_tab():
     with cbtn:
         st.markdown('<div style="height:1.6rem"></div>', unsafe_allow_html=True)
         if st.button("🔄 刷新", use_container_width=True, key="analytics_refresh"):
-            st.cache_data.clear() if hasattr(st, "cache_data") else None
+            load_records.clear()
             st.rerun()
 
     records = load_records()
