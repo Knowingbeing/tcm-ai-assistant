@@ -19,6 +19,8 @@ create index if not exists idx_patients_created_at on patients (created_at desc)
 create table if not exists consultations (
     id                   bigserial   primary key,
     patient_id           bigint      references patients(id) on delete set null,
+    session_id           text        default '',
+    round_index          integer     default 0,
     name                 text        not null default '匿名',
     age                  integer     default 0,
     gender               text        default '',
@@ -33,7 +35,8 @@ create table if not exists consultations (
     treatment_principle  text        default '',
     analysis             text        default '',
     confidence           integer     default 0 check (confidence between 0 and 100),
-    source               text        default 'manual' check (source in ('manual', 'api', 'imported')),
+    source               text        default 'manual' check (source in ('manual', 'api', 'imported', 'chat', 'draft')),
+    messages             jsonb       default '[]'::jsonb,
     created_at           timestamptz not null default now()
 );
 create index if not exists idx_consultations_created_at on consultations (created_at desc);

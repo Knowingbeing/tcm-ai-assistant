@@ -136,9 +136,39 @@ def save_record(record: Dict) -> bool:
                 payload["messages"] = json.loads(payload["messages"])
             except Exception:
                 payload["messages"] = []
+        # 确保 messages 是 JSON 格式
+        if "messages" in payload and not isinstance(payload["messages"], (list, dict)):
+            payload["messages"] = []
         client.table("consultations").insert(payload).execute()
         return True
     except Exception as e:
+        # 如果是因为缺少字段导致的错误，尝试降级保存
+        error_msg = str(e)
+        if "column" in error_msg.lower() or "does not exist" in error_msg.lower():
+            # 移除可能导致问题的字段，重试
+            fallback_allowed = {
+                "name", "age", "gender",
+                "chief_complaint", "symptoms",
+                "tongue_sign", "pulse_sign",
+                "syndrome", "syndrome_category",
+                "formula", "formula_adjustment",
+                "treatment_principle", "analysis",
+                "confidence", "source",
+            }
+            fallback_payload = {k: v for k, v in record.items() if k in fallback_allowed}
+            if isinstance(fallback_payload.get("symptoms"), str):
+                import json
+                try:
+                    fallback_payload["symptoms"] = json.loads(fallback_payload["symptoms"])
+                except Exception:
+                    fallback_payload["symptoms"] = []
+            try:
+                client.table("consultations").insert(fallback_payload).execute()
+                print(f"[supabase] 降级保存成功（缺少部分字段）")
+                return True
+            except Exception as e2:
+                print(f"[supabase] 降级保存也失败：{e2}")
+                return False
         print(f"[supabase] save_record 失败：{e}")
         return False
 
