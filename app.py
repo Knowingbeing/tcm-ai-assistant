@@ -582,12 +582,14 @@ def main():
     if "_api_key_ok" not in st.session_state:
         st.session_state._api_key_ok = False
     engine = get_engine()
-    # ★ 三路判定：保存标志位 / engine 对象 / 磁盘 settings — 任一为真即「已配置」
+    # ★ 四路判定（覆盖所有场景：已保存 / engine 对象 / 磁盘持久化 / widget 持久化）
     _disk_key = (load_settings().get("api_key") or "").strip()
+    _widget_val = str(st.session_state.get("cfg_api_key", "") or "").strip()
     has_api_key = (
-        st.session_state._api_key_ok
-        or bool(getattr(engine, "has_api_key", False))
-        or bool(_disk_key and len(_disk_key) >= 10)
+        st.session_state._api_key_ok          # ① 保存按钮写入的标志位
+        or bool(getattr(engine, "has_api_key", False))  #② engine 初始化成功
+        or bool(_disk_key and len(_disk_key) >= 10)     #③ 磁盘/云端 settings
+        or bool(_widget_val and len(_widget_val) >= 10)  #④ 输入框 widget 值（Streamlit 跨 rerun 持久）
     )
     settings = load_settings()
     records = load_records()
