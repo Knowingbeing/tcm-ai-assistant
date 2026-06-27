@@ -1835,26 +1835,31 @@ def render_settings_tab():
     # ★ Supabase 连接诊断按钮
     if supabase_configured():
         if st.button("🔍 诊断 Supabase 连接", use_container_width=True):
-            from utils.supabase_client import diagnose_connection
-            with st.spinner("正在诊断..."):
-                diag = diagnose_connection()
-            if diag["errors"]:
-                for err in diag["errors"]:
-                    st.error(err)
-            else:
-                st.success("✅ Supabase 连接正常，表结构完整，读写测试通过")
-            with st.expander("📋 诊断详情", expanded=bool(diag["errors"])):
-                st.json({
-                    "已配置": diag["configured"],
-                    "客户端OK": diag["client_ok"],
-                    "表存在": diag["table_exists"],
-                    "检测到的列": diag["columns"],
-                    "缺失的列": diag["missing_columns"],
+            try:
+                from utils.supabase_client import diagnose_connection
+                with st.spinner("正在诊断..."):
+                    diag = diagnose_connection()
+                if diag["errors"]:
+                    for err in diag["errors"]:
+                        st.error(err)
+                else:
+                    st.success("✅ Supabase 连接正常，表结构完整，读写测试通过")
+                with st.expander("📋 诊断详情", expanded=bool(diag["errors"])):
+                    st.json({
+                        "已配置": diag["configured"],
+                        "客户端OK": diag["client_ok"],
+                        "表存在": diag["table_exists"],
+                        "检测到的列": diag["columns"],
+                        "缺失的列": diag["missing_columns"],
                     "记录数": diag["record_count"],
                     "测试写入": "成功" if diag["test_insert_ok"] else f"失败：{diag['test_insert_error']}",
                 })
                 if diag["missing_columns"]:
                     st.warning(f"缺失字段：{', '.join(diag['missing_columns'])} → 请执行 `supabase/migration_p1_session.sql`")
+            except ImportError as e:
+                st.error(f"❌ 导入诊断模块失败：{str(e)[:200]}")
+            except Exception as e:
+                st.error(f"❌ 诊断过程异常：{str(e)[:200]}")
 
     if st.button("🗑️  清空所有记录", use_container_width=True):
         if supabase_configured():
