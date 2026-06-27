@@ -87,7 +87,10 @@ def is_configured() -> bool:
 # --------------------------------------------------------------------------
 
 def get_records() -> List[Dict]:
-    """读取所有问诊记录，按时间倒序。失败时返回空列表。"""
+    """读取所有问诊记录，按时间倒序。失败时返回空列表。
+
+    兼容性处理：优先按 created_at desc 排序；若列不存在则回退 id desc。
+    """
     client = get_client()
     if client is None:
         return []
@@ -99,9 +102,20 @@ def get_records() -> List[Dict]:
             .execute()
         )
         return resp.data or []
-    except Exception as e:
-        print(f"[supabase] get_records 失败：{e}")
-        return []
+    except Exception as e1:
+        # 列不存在/语法错误 → 回退到按 id 倒序
+        print(f"[supabase] get_records（created_at 排序）失败，尝试 id 排序：{e1}")
+        try:
+            resp = (
+                client.table("consultations")
+                .select("*")
+                .order("id", desc=True)
+                .execute()
+            )
+            return resp.data or []
+        except Exception as e2:
+            print(f"[supabase] get_records（id 排序）失败，返回空：{e2}")
+            return []
 
 
 def save_record(record: Dict) -> bool:
@@ -176,35 +190,58 @@ def save_record(record: Dict) -> bool:
 def get_sessions() -> List[Dict]:
     """读取所有问诊会话（按 session_id 聚合的最新一条），按时间倒序。
     用于"问诊历史"列表：每条只返回该 session 最新一轮的概要。
+
+    兼容性：先按 created_at 排序；若列不存在则按 id 排序；
+    若 session_id/round_index 列也不存在则按 id 降序作为「单条会话」返回。
     """
     client = get_client()
     if client is None:
         return []
+    # 优先尝试带排序的查询
+    last_err = None
+    for order_col in ("created_at", "id"):
+        try:
+            resp = (
+                client.table("consultations")
+                .select("id,session_id,round_index,syndrome,formula,confidence,created_at,chief_complaint,name")
+                .order(order_col, desc=True)
+                .execute()
+            )
+            rows = resp.data or []
+            # 按 session_id 取 round_index 最大的一条
+            seen = {}
+            for r in rows:
+                sid = r.get("session_id")
+                if not sid:
+                    continue
+                if sid not in seen or (r.get("round_index") or 0) > (seen[sid].get("round_index") or 0):
+                    seen[sid] = r
+            return list(seen.values())
+        except Exception as e:
+            last_err = e
+            # 如果是「列不存在」类错误，尝试更小的 select 集合 + 下一排序字段
+            print(f"[supabase] get_sessions 按 {order_col} 排序失败：{e}")
+            continue
+    # 最后兜底：只取必要字段、不排序
     try:
-        # 拉全部，按 session_id + created_at 在内存聚合
         resp = (
             client.table("consultations")
-            .select("id,session_id,round_index,syndrome,formula,confidence,created_at,chief_complaint,name")
-            .order("created_at", desc=True)
+            .select("id,syndrome,formula,confidence,chief_complaint,name")
             .execute()
         )
         rows = resp.data or []
-        # 按 session_id 取 round_index 最大的一条
-        seen = {}
-        for r in rows:
-            sid = r.get("session_id")
-            if not sid:
-                continue
-            if sid not in seen or (r.get("round_index") or 0) > (seen[sid].get("round_index") or 0):
-                seen[sid] = r
-        return list(seen.values())
+        # 没有 session_id 字段时，把每条都视作一个独立会话
+        return rows
     except Exception as e:
-        print(f"[supabase] get_sessions 失败：{e}")
+        print(f"[supabase] get_sessions 完全失败：{e}")
         return []
 
 
 def get_session_history(session_id: str) -> List[Dict]:
-    """读取某个 session_id 的全部记录（多轮），按 round_index 升序。"""
+    """读取某个 session_id 的全部记录（多轮），按 round_index 升序。
+
+    兼容性：若 round_index 列不存在则只按 id 倒序取该 session 的全部记录。
+    """
     client = get_client()
     if client is None:
         return []
@@ -217,9 +254,20 @@ def get_session_history(session_id: str) -> List[Dict]:
             .execute()
         )
         return resp.data or []
-    except Exception as e:
-        print(f"[supabase] get_session_history 失败：{e}")
-        return []
+    except Exception as e1:
+        print(f"[supabase] get_session_history 失败，尝试 id 排序：{e1}")
+        try:
+            resp = (
+                client.table("consultations")
+                .select("*")
+                .eq("session_id", session_id)
+                .order("id", desc=False)
+                .execute()
+            )
+            return resp.data or []
+        except Exception as e2:
+            print(f"[supabase] get_session_history 第二次也失败：{e2}")
+            return []
 
 
 def clear_records() -> bool:

@@ -521,7 +521,11 @@ def load_records():
     """
     if supabase_configured():
         rows = _sb_get_records()
-        return [_row_to_record(r) for r in rows]
+        result = [_row_to_record(r) for r in rows]
+        # 调试日志：首次加载/条数异常时给提示
+        if not result:
+            print("[load_records] Supabase 已配置但返回 0 条记录，请检查 consultations 表是否为空或表结构是否兼容")
+        return result
     if os.path.exists(RECORDS_FILE):
         try:
             with open(RECORDS_FILE, "r", encoding="utf-8") as f:
@@ -589,10 +593,10 @@ def main():
     _disk_key = (load_settings().get("api_key") or "").strip()
     _widget_val = str(st.session_state.get("cfg_api_key", "") or "").strip()
     has_api_key = (
-        st.session_state._api_key_ok          # ① 保存按钮写入的标志位
-        or bool(getattr(engine, "has_api_key", False))  #② engine 初始化成功
-        or bool(_disk_key and len(_disk_key) >= 10)     #③ 磁盘/云端 settings
-        or bool(_widget_val and len(_widget_val) >= 10)  #④ 输入框 widget 值（Streamlit 跨 rerun 持久）
+        bool(st.session_state.get("_api_key_ok", False))     # ① 保存按钮写入的标志位
+        or bool(getattr(engine, "has_api_key", False))       # ② engine 初始化成功
+        or bool(_disk_key and len(_disk_key) >= 10)          # ③ 磁盘/云端 settings
+        or bool(_widget_val and len(_widget_val) >= 10)      # ④ 输入框 widget 值（Streamlit 跨 rerun 持久）
     )
     settings = load_settings()
     records = load_records()
@@ -1317,7 +1321,15 @@ def render_analytics_tab():
             load_records.clear()
             st.rerun()
 
+    # ★ 诊断信息：让用户知道数据从哪来、加载了几条
+    backend = "☁️ Supabase" if supabase_configured() else "💾 本地 JSON"
     records = load_records()
+    st.markdown(
+        f'<div style="color:var(--c-ink-soft); font-size:0.82rem; margin:0.4rem 0 0.8rem 0;">'
+        f'📦 存储后端：<b>{backend}</b>　·　已加载 <b>{len(records)}</b> 条记录'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
     valid = [r for r in records if r.get("confidence", 0) > 0]
     avg_conf = sum(r.get("confidence", 0) for r in valid) / len(valid) if valid else 0
 
