@@ -540,7 +540,7 @@ def save_records(records):
     if supabase_configured():
         # Supabase 模式下不批量覆盖，由上层逐条调 _sb_save_record
         for r in records:
-            _sb_save_record(r)
+            ok, _err = _sb_save_record(r)
         return
     with open(RECORDS_FILE, "w", encoding="utf-8") as f:
         json.dump(records, f, ensure_ascii=False, indent=2)
@@ -1230,12 +1230,23 @@ def _save_chat_session(sess):
     }
     saved = False
     if supabase_configured():
-        ok = _sb_save_record(record)
+        ok, err = _sb_save_record(record)
         if ok:
             st.success("✅ 已保存到云端（含完整对话）")
             saved = True
         else:
-            st.error("❌ 云端保存失败")
+            st.error(f"❌ 云端保存失败：{err}")
+            with st.expander("📋 排查建议", expanded=True):
+                st.markdown(f"""
+                **错误详情**：`{err}`
+
+                **常见原因**：
+                1. **表未创建** → 在 Supabase SQL Editor 执行 `supabase/schema.sql`
+                2. **缺字段** → 执行 `supabase/migration_p1_session.sql`（添加 session_id/round_index/messages）
+                3. **RLS 拦截** → 执行 `ALTER TABLE consultations DISABLE ROW LEVEL SECURITY;`
+                4. **CHECK 约束** → confidence 超出 0-100、gender 不在允许范围、source 不在允许范围
+                5. **Key 无效** → 检查 `.streamlit/secrets.toml` 中的 SUPABASE_URL / SUPABASE_KEY
+                """)
     else:
         # 本地降级：直接写文件
         from datetime import datetime as _dt
@@ -1276,10 +1287,11 @@ def _save_draft_session(sess):
         "messages": sess.get("messages", []),
     }
     if supabase_configured():
-        if _sb_save_record(record):
+        ok, err = _sb_save_record(record)
+        if ok:
             st.success("✅ 草稿已保存到云端")
         else:
-            st.error("❌ 云端保存失败")
+            st.error(f"❌ 云端保存失败：{err}")
     else:
         from datetime import datetime as _dt
         records = load_records()
@@ -1298,8 +1310,10 @@ def _reset_chat_session():
     st.session_state.chat_session = {}
 
 
-def _sb_save_record(record: Dict) -> bool:
-    """薄包装：调用 utils.supabase_client.save_record（缺列兼容）"""
+def _sb_save_record(record: Dict) -> tuple:
+    """薄包装：调用 utils.supabase_client.save_record（缺列兼容）。
+    返回 (success: bool, error_msg: str)。
+    """
     from utils.supabase_client import save_record
     return save_record(record)
 
@@ -1817,6 +1831,31 @@ def render_settings_tab():
     st.markdown('<div class="card-title"><div class="ti">🗄️</div>数据管理</div>', unsafe_allow_html=True)
     records = load_records()
     st.markdown(f'<p style="font-size:0.95rem; margin:0 0 1rem 0">当前共有 <b style="color:var(--c-primary)">{len(records)}</b> 条问诊记录</p>', unsafe_allow_html=True)
+
+    # ★ Supabase 连接诊断按钮
+    if supabase_configured():
+        if st.button("🔍 诊断 Supabase 连接", use_container_width=True):
+            from utils.supabase_client import diagnose_connection
+            with st.spinner("正在诊断..."):
+                diag = diagnose_connection()
+            if diag["errors"]:
+                for err in diag["errors"]:
+                    st.error(err)
+            else:
+                st.success("✅ Supabase 连接正常，表结构完整，读写测试通过")
+            with st.expander("📋 诊断详情", expanded=bool(diag["errors"])):
+                st.json({
+                    "已配置": diag["configured"],
+                    "客户端OK": diag["client_ok"],
+                    "表存在": diag["table_exists"],
+                    "检测到的列": diag["columns"],
+                    "缺失的列": diag["missing_columns"],
+                    "记录数": diag["record_count"],
+                    "测试写入": "成功" if diag["test_insert_ok"] else f"失败：{diag['test_insert_error']}",
+                })
+                if diag["missing_columns"]:
+                    st.warning(f"缺失字段：{', '.join(diag['missing_columns'])} → 请执行 `supabase/migration_p1_session.sql`")
+
     if st.button("🗑️  清空所有记录", use_container_width=True):
         if supabase_configured():
             ok = _sb_clear_records()

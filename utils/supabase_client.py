@@ -118,13 +118,37 @@ def get_records() -> List[Dict]:
             return []
 
 
-def save_record(record: Dict) -> bool:
-    """插入单条问诊记录。返回是否成功。"""
+def save_record(record: Dict) -> tuple:
+    """插入单条问诊记录。
+
+    返回 ``(success: bool, error_msg: str)``。
+    成功时 error_msg 为空字符串；失败时包含具体原因，供 UI 直接展示。
+    """
     client = get_client()
     if client is None:
-        return False
+        return (False, "Supabase 未配置或客户端初始化失败（检查 URL / Key）")
+
+    # 数据清洗：确保 JSON 字段可序列化
+    import json as _json
+
+    def _clean_json_field(val, default):
+        if val is None:
+            return default
+        if isinstance(val, str):
+            try:
+                return _json.loads(val)
+            except Exception:
+                return default
+        if isinstance(val, (list, dict)):
+            # 确保内部元素可 JSON 序列化
+            try:
+                _json.dumps(val, ensure_ascii=False)
+                return val
+            except Exception:
+                return default
+        return default
+
     try:
-        # 仅保留数据库已知列，避免脏字段写入失败
         allowed = {
             "patient_id", "name", "age", "gender",
             "chief_complaint", "symptoms",
@@ -136,30 +160,26 @@ def save_record(record: Dict) -> bool:
             "session_id", "round_index", "messages",
         }
         payload = {k: v for k, v in record.items() if k in allowed}
-        # symptoms 需为 list 类型
-        if isinstance(payload.get("symptoms"), str):
-            import json
+        payload["symptoms"] = _clean_json_field(payload.get("symptoms"), [])
+        if "messages" in payload:
+            payload["messages"] = _clean_json_field(payload.get("messages"), [])
+        # confidence 约束：0-100，越界则截断
+        if "confidence" in payload:
             try:
-                payload["symptoms"] = json.loads(payload["symptoms"])
+                c = int(payload["confidence"])
+                payload["confidence"] = max(0, min(100, c))
             except Exception:
-                payload["symptoms"] = []
-        # messages 同理
-        if isinstance(payload.get("messages"), str):
-            import json
-            try:
-                payload["messages"] = json.loads(payload["messages"])
-            except Exception:
-                payload["messages"] = []
-        # 确保 messages 是 JSON 格式
-        if "messages" in payload and not isinstance(payload["messages"], (list, dict)):
-            payload["messages"] = []
+                payload["confidence"] = 0
+        # chief_complaint 是 NOT NULL，空值兜底
+        if not payload.get("chief_complaint"):
+            payload["chief_complaint"] = "(未填写)"
+
         client.table("consultations").insert(payload).execute()
-        return True
+        return (True, "")
     except Exception as e:
-        # 如果是因为缺少字段导致的错误，尝试降级保存
         error_msg = str(e)
+        # 如果是因为缺少字段导致的错误，尝试降级保存
         if "column" in error_msg.lower() or "does not exist" in error_msg.lower():
-            # 移除可能导致问题的字段，重试
             fallback_allowed = {
                 "name", "age", "gender",
                 "chief_complaint", "symptoms",
@@ -170,21 +190,139 @@ def save_record(record: Dict) -> bool:
                 "confidence", "source",
             }
             fallback_payload = {k: v for k, v in record.items() if k in fallback_allowed}
-            if isinstance(fallback_payload.get("symptoms"), str):
-                import json
+            fallback_payload["symptoms"] = _clean_json_field(fallback_payload.get("symptoms"), [])
+            if not fallback_payload.get("chief_complaint"):
+                fallback_payload["chief_complaint"] = "(未填写)"
+            if "confidence" in fallback_payload:
                 try:
-                    fallback_payload["symptoms"] = json.loads(fallback_payload["symptoms"])
+                    fallback_payload["confidence"] = max(0, min(100, int(fallback_payload["confidence"])))
                 except Exception:
-                    fallback_payload["symptoms"] = []
+                    fallback_payload["confidence"] = 0
             try:
                 client.table("consultations").insert(fallback_payload).execute()
-                print(f"[supabase] 降级保存成功（缺少部分字段）")
-                return True
+                print(f"[supabase] 降级保存成功（缺少 session_id/round_index/messages 字段）")
+                return (True, "")
             except Exception as e2:
-                print(f"[supabase] 降级保存也失败：{e2}")
-                return False
-        print(f"[supabase] save_record 失败：{e}")
-        return False
+                detail = _format_supabase_error(e2)
+                print(f"[supabase] 降级保存也失败：{detail}")
+                return (False, f"降级保存也失败：{detail}")
+        detail = _format_supabase_error(e)
+        print(f"[supabase] save_record 失败：{detail}")
+        return (False, detail)
+
+
+def _format_supabase_error(e: Exception) -> str:
+    """把 Supabase / PostgREST 异常格式化为用户可读的中文提示。"""
+    msg = str(e)
+    low = msg.lower()
+    if "row level security" in low or "rls" in low:
+        return "Supabase 行级安全(RLS)阻止了写入 → 请在 Supabase SQL Editor 执行：ALTER TABLE consultations DISABLE ROW LEVEL SECURITY;"
+    if "violates not-null constraint" in low:
+        col = ""
+        if "column" in low:
+            col = msg.split("column")[1].split("of")[0].strip() if "column" in low else ""
+        return f"NOT NULL 约束失败（字段 {col} 不能为空）→ 原文：{msg[:200]}"
+    if "violates check constraint" in low:
+        return f"CHECK 约束失败（值不在允许范围内）→ 原文：{msg[:200]}"
+    if "does not exist" in low or "column" in low and "relation" not in low:
+        return f"表结构不匹配（列不存在）→ 请在 Supabase SQL Editor 执行 supabase/migration_p1_session.sql → 原文：{msg[:200]}"
+    if "relation" in low and "does not exist" in low:
+        return "consultations 表不存在 → 请在 Supabase SQL Editor 执行 supabase/schema.sql"
+    if "invalid api key" in low or "jwt" in low:
+        return "Supabase API Key 无效或已过期 → 请检查 .streamlit/secrets.toml 中的 SUPABASE_KEY"
+    if "fetch failed" in low or "connection" in low or "timeout" in low:
+        return f"网络连接失败 → 检查 SUPABASE_URL 是否正确、网络是否可达 → 原文：{msg[:200]}"
+    return msg[:300]
+
+
+def diagnose_connection() -> dict:
+    """诊断 Supabase 连接与表结构，返回结构化报告。供 UI「诊断」按钮调用。"""
+    report = {
+        "configured": False,
+        "client_ok": False,
+        "table_exists": False,
+        "columns": [],
+        "missing_columns": [],
+        "rls_disabled": None,
+        "test_insert_ok": False,
+        "test_insert_error": "",
+        "record_count": -1,
+        "errors": [],
+    }
+    url, key = _get_credentials()
+    report["configured"] = bool(url and key)
+    if not report["configured"]:
+        report["errors"].append("未配置 SUPABASE_URL / SUPABASE_KEY（请检查 .streamlit/secrets.toml 或环境变量）")
+        return report
+
+    client = get_client()
+    if client is None:
+        report["errors"].append("Supabase 客户端初始化失败（URL 或 Key 无效）")
+        return report
+    report["client_ok"] = True
+
+    # 检测表是否存在 + 有哪些列
+    expected_cols = {
+        "id", "patient_id", "session_id", "round_index",
+        "name", "age", "gender", "chief_complaint", "symptoms",
+        "tongue_sign", "pulse_sign", "syndrome", "syndrome_category",
+        "formula", "formula_adjustment", "treatment_principle", "analysis",
+        "confidence", "source", "messages", "created_at",
+    }
+    try:
+        resp = client.table("consultations").select("*").limit(1).execute()
+        report["table_exists"] = True
+        if resp.data:
+            report["columns"] = list(resp.data[0].keys())
+        else:
+            # 表存在但为空，尝试用 RPC 获取列信息
+            try:
+                col_resp = client.rpc("to_jsonb", {}).execute()
+            except Exception:
+                pass
+            report["columns"] = ["(表为空，无法检测列)"]
+        report["missing_columns"] = [c for c in expected_cols if c not in report["columns"]] if resp.data else []
+    except Exception as e:
+        msg = str(e).lower()
+        if "does not exist" in msg or "relation" in msg:
+            report["errors"].append("consultations 表不存在 → 请执行 supabase/schema.sql")
+        elif "row level security" in msg or "rls" in msg:
+            report["rls_disabled"] = False
+            report["errors"].append("RLS 已启用，anon key 无法读写 → 请执行：ALTER TABLE consultations DISABLE ROW LEVEL SECURITY;")
+        else:
+            report["errors"].append(f"查询失败：{str(e)[:200]}")
+        return report
+
+    # 检测记录数
+    try:
+        count_resp = client.table("consultations").select("*", count="exact").execute()
+        report["record_count"] = count_resp.count if hasattr(count_resp, "count") else len(count_resp.data)
+    except Exception:
+        pass
+
+    # 测试插入（用一条 source='draft' 的测试记录，随后删除）
+    try:
+        test_payload = {
+            "name": "_诊断测试_",
+            "age": 0,
+            "gender": "",
+            "chief_complaint": "(诊断测试)",
+            "symptoms": [],
+            "syndrome": "(诊断测试)",
+            "confidence": 0,
+            "source": "draft",
+        }
+        insert_resp = client.table("consultations").insert(test_payload).execute()
+        report["test_insert_ok"] = True
+        # 清理测试数据
+        if insert_resp.data and insert_resp.data[0].get("id"):
+            client.table("consultations").delete().eq("id", insert_resp.data[0]["id"]).execute()
+    except Exception as e:
+        detail = _format_supabase_error(e)
+        report["test_insert_error"] = detail
+        report["errors"].append(f"测试写入失败：{detail}")
+
+    return report
 
 
 def get_sessions() -> List[Dict]:
