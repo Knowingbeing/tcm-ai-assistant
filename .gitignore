@@ -1,5 +1,6 @@
 # Python
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -49,3 +50,6 @@ Thumbs.db
 
 # Streamlit secrets（含 Supabase 凭证，已加 .example 模板）
 .streamlit/secrets.toml
+
+# 工具内部文件
+.workbuddy/
