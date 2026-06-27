@@ -791,9 +791,12 @@ def render_consultation_tab(engine):
             "气短", "神疲", "四肢厥冷", "干咳少痰", "痰多", "痰黄稠",
             "关节疼痛", "身热不扬", "心烦", "消渴", "刺痛", "面色晦暗",
         ]
+        # 确保 default 值是字符串列表且在 all_symptoms 中
+        current_symptoms = sess.get("symptoms", [])
+        default_symptoms = [s for s in current_symptoms if isinstance(s, str) and s in all_symptoms]
         sess["symptoms"] = st.multiselect(
             "伴随症状", all_symptoms,
-            default=sess.get("symptoms", []),
+            default=default_symptoms,
             label_visibility="collapsed",
             key="chat_symptoms",
         )
