@@ -19,7 +19,7 @@ from utils.supabase_client import (
     save_settings as _sb_save_settings,
 )
 from data.tcm_data import FORMULAS, SYNDROMES, HERBS
-from data.ten_asks import ALL_ASKS, TEN_ASKS, DEFAULT_TEN_ASKS, TONGUE_ASK, PULSE_ASK
+from data.ten_asks import ALL_ASKS, TEN_ASKS, DEFAULT_TEN_ASKS, TONGUE_ASK, PULSE_ASK, MENSTRUATION_ASK
 
 st.set_page_config(
     page_title="中医AI智能问诊助手",
