@@ -945,24 +945,6 @@ def render_consultation_tab(engine):
         )
 
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-        st.markdown("""
-        <div class="card-title"><div class="ti">👅</div>舌脉（可选）</div>
-        """, unsafe_allow_html=True)
-        c1, c2 = st.columns(2)
-        with c1:
-            sess["tongue_sign"] = st.text_input(
-                "舌象", value=sess.get("tongue_sign", ""),
-                placeholder="如：舌淡苔白", label_visibility="collapsed",
-                key="chat_tongue",
-            )
-        with c2:
-            sess["pulse_sign"] = st.text_input(
-                "脉象", value=sess.get("pulse_sign", ""),
-                placeholder="如：脉浮紧", label_visibility="collapsed",
-                key="chat_pulse",
-            )
-
-        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
             start_clicked = st.button(
