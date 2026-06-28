@@ -19,6 +19,7 @@ from utils.supabase_client import (
     save_settings as _sb_save_settings,
 )
 from data.tcm_data import FORMULAS, SYNDROMES, HERBS
+from data.ten_asks import ALL_ASKS, TEN_ASKS, DEFAULT_TEN_ASKS, TONGUE_ASK, PULSE_ASK
 
 st.set_page_config(
     page_title="中医AI智能问诊助手",
@@ -782,7 +783,149 @@ def render_consultation_tab(engine):
         )
         sess["chief_complaint"] = chief
 
-        all_symptoms = [
+        # ===== 十问歌结构化问诊 =====
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        st.markdown("""
+        <div class="card-title"><div class="ti">📋</div>十问歌（结构化问诊）</div>
+        <p style="color:var(--c-ink-soft); margin:0; font-size:0.85rem;">
+            按中医十问歌逐项填写，帮助AI更准确辨证
+        </p>
+        """, unsafe_allow_html=True)
+
+        # 初始化十问歌数据
+        if "ten_asks_data" not in sess:
+            sess["ten_asks_data"] = dict(DEFAULT_TEN_ASKS)
+
+        # 分阶段显示十问歌
+        for stage in [1, 2, 3]:
+            stage_asks = [ask for ask in TEN_ASKS if ask.get("stage") == stage]
+            if stage_asks:
+                with st.expander(f"第{stage}阶段问诊", expanded=(stage == 1)):
+                    for ask in stage_asks:
+                        key = ask["key"]
+                        label = f"{ask['icon']} {ask['label']}"
+
+                        if ask.get("input_type") == "text":
+                            # 文本输入型（如旧病、舌诊）
+                            value = st.text_input(
+                                label,
+                                value=sess["ten_asks_data"].get(key, ""),
+                                placeholder=ask.get("placeholder", ""),
+                                key=f"ten_{key}",
+                            )
+                            sess["ten_asks_data"][key] = value
+                        elif ask.get("multi"):
+                            # 多选型（如头身、胸腹）
+                            current = sess["ten_asks_data"].get(key, {})
+                            if isinstance(current, dict):
+                                current = current.get("parts", [])
+                            selected = st.multiselect(
+                                label,
+                                ask["options"],
+                                default=[s for s in current if s in ask["options"]],
+                                key=f"ten_{key}",
+                            )
+                            sess["ten_asks_data"][key] = {"parts": selected, "detail": ""}
+                        elif "sub_asks" in ask:
+                            # 子问题型（如二便、饮食口味）
+                            sub_data = sess["ten_asks_data"].get(key, {})
+                            if not isinstance(sub_data, dict):
+                                sub_data = {}
+                            cols = st.columns(len(ask["sub_asks"]))
+                            for i, sub in enumerate(ask["sub_asks"]):
+                                with cols[i]:
+                                    sub_val = st.selectbox(
+                                        f"{label}-{sub['label']}",
+                                        sub["options"],
+                                        index=sub["options"].index(sub_data.get(sub["key"], sub["options"][0])) if sub_data.get(sub["key"]) in sub["options"] else 0,
+                                        key=f"ten_{key}_{sub['key']}",
+                                    )
+                                    sub_data[sub["key"]] = sub_val
+                            sess["ten_asks_data"][key] = sub_data
+                        else:
+                            # 单选型（如寒热、汗）
+                            options = ["请选择"] + ask["options"]
+                            current_val = sess["ten_asks_data"].get(key, {})
+                            if isinstance(current_val, dict):
+                                current_val = current_val.get("type", "")
+                            current_idx = 0
+                            if current_val in options:
+                                current_idx = options.index(current_val)
+                            selected = st.selectbox(
+                                label,
+                                options,
+                                index=current_idx,
+                                key=f"ten_{key}",
+                            )
+                            sess["ten_asks_data"][key] = {"type": selected if selected != "请选择" else "", "detail": ""}
+
+        # 女性经期问诊（仅女性显示）
+        if sess["patient"].get("gender") == "女":
+            st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+            with st.expander("🌸 经期问诊（女性）", expanded=False):
+                menstruation = sess["ten_asks_data"].get("menstruation") or {}
+                cols = st.columns(4)
+                for i, sub in enumerate(MENSTRUATION_ASK["sub_asks"]):
+                    with cols[i]:
+                        val = st.selectbox(
+                            f"月经{sub['label']}",
+                            sub["options"],
+                            index=sub["options"].index(menstruation.get(sub["key"], sub["options"][0])) if menstruation.get(sub["key"]) in sub["options"] else 0,
+                            key=f"ten_menstruation_{sub['key']}",
+                        )
+                        menstruation[sub["key"]] = val
+                sess["ten_asks_data"]["menstruation"] = menstruation
+
+        # 舌诊和脉诊
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        with c1:
+            sess["tongue_sign"] = st.text_input(
+                "👅 舌象", value=sess.get("tongue_sign", ""),
+                placeholder=TONGUE_ASK.get("placeholder", "如：舌淡苔白"),
+                label_visibility="collapsed",
+                key="chat_tongue",
+            )
+        with c2:
+            pulse_options = ["请选择"] + PULSE_ASK["options"]
+            current_pulse = sess.get("pulse_sign", "")
+            pulse_idx = 0
+            if current_pulse in pulse_options:
+                pulse_idx = pulse_options.index(current_pulse)
+            selected_pulse = st.selectbox(
+                "🫀 脉象",
+                pulse_options,
+                index=pulse_idx,
+                key="chat_pulse",
+            )
+            sess["pulse_sign"] = selected_pulse if selected_pulse != "请选择" else ""
+
+        # 合并十问歌数据到症状列表
+        ten_symptoms = []
+        for key, val in sess["ten_asks_data"].items():
+            if isinstance(val, dict):
+                if "parts" in val:
+                    ten_symptoms.extend(val.get("parts", []))
+                elif "type" in val and val["type"]:
+                    ten_symptoms.append(val["type"])
+                elif "stool" in val and val.get("stool"):
+                    ten_symptoms.append(f"大便{val['stool']}")
+                elif "urine" in val and val.get("urine"):
+                    ten_symptoms.append(f"小便{val['urine']}")
+                elif "appetite" in val and val.get("appetite"):
+                    ten_symptoms.append(val["appetite"])
+                elif "thirst" in val and val.get("thirst"):
+                    ten_symptoms.append(val["thirst"])
+                elif "quality" in val and val.get("quality"):
+                    ten_symptoms.append(val["quality"])
+            elif isinstance(val, str) and val:
+                ten_symptoms.append(val)
+
+        # 合并到症状列表（去重）
+        current_symptoms = sess.get("symptoms", [])
+        all_symptoms = list(set(current_symptoms + [s for s in ten_symptoms if s and s != "无不适"]))
+
+        all_symptoms_options = [
             "发热", "恶寒", "畏寒", "头痛", "头晕", "咳嗽", "鼻塞", "流涕",
             "咽喉痛", "胸闷", "心悸", "腹痛", "腹泻", "便秘", "食欲不振",
             "口渴", "口苦", "失眠", "乏力", "自汗", "盗汗", "腰膝酸软",
