@@ -1006,9 +1006,10 @@ def render_consultation_tab(engine):
 
 
 def _collect_symptoms_from_ten_asks(sess):
-    """从十问歌数据中收集症状"""
+    """从十问歌数据 + 手动选择症状 收集完整症状列表"""
     symptoms = []
-    ten = sess.get("ten_asks", {})
+    # 十问歌结构化数据（键名是 ten_asks_data，见 line 796-797）
+    ten = sess.get("ten_asks_data", {})
     for key, val in ten.items():
         if isinstance(val, dict):
             if "parts" in val:
@@ -1027,93 +1028,15 @@ def _collect_symptoms_from_ten_asks(sess):
                 symptoms.append(val["quality"])
         elif isinstance(val, str) and val:
             symptoms.append(val)
-    return list(set(symptoms))
+    # 合并手动多选的症状（st.multiselect 的值存在 sess["symptoms"]）
+    manual = sess.get("symptoms", []) or []
+    all_symptoms = list(set(symptoms + [s for s in manual if s]))
+    return all_symptoms
 
 
 # ---------------------------------------------------------------------------
 # 多轮问诊 — 内部辅助函数
 # ---------------------------------------------------------------------------
-def _render_chat_history(messages):
-    """渲染聊天历史（按时间倒序: 新消息在底部）"""
-    # 简单实现：用 st.chat_message
-    for msg in messages:
-        role = msg.get("role", "user")
-        kind = msg.get("kind", "message")
-        content = msg.get("content", "")
-        ts = msg.get("ts", "")
-        with st.chat_message(name="user" if role == "user" else "assistant"):
-            if kind == "greeting":
-                st.markdown(f"**中医 AI 助手** · _{ts}_  \n\n{content}")
-            elif kind == "complaint":
-                st.markdown(f"**你** · _{ts}_  \n\n{content}")
-            elif kind == "followup_answer":
-                st.markdown(f"**你** · _{ts}_  \n\n{content}")
-            elif kind == "diagnosis":
-                # 诊断结论用卡片渲染（在 chat 内部）
-                _render_result_inline(content, ts)
-            else:
-                st.markdown(f"**{'你' if role == 'user' else 'AI'}** · _{ts}_  \n\n{content}")
-
-
-def _render_result_inline(result: Dict, ts: str):
-    """在 chat 内部紧凑地渲染诊断结果"""
-    is_ok = result.get("confidence", 0) > 0
-    cls = "" if is_ok else " fail"
-    conf = result.get("confidence", 0)
-    st.markdown(f"""
-    <div class="result-stack" style="margin-top:0.4rem">
-        <div class="result-hero{cls}" style="padding:0.9rem 1rem">
-            <div class="label">{'✅ 辨证完成' if is_ok else '❌ 辨证失败'} · {ts}</div>
-            <div class="value" style="font-size:1.3rem">🩺 {result.get('syndrome','')}</div>
-            <div class="row">
-                <div class="col">
-                    <div class="lab">辨证体系</div>
-                    <div class="val">{result.get('syndrome_category', '待分类')}</div>
-                </div>
-                <div class="col">
-                    <div class="lab">置信度</div>
-                    <div class="val">{conf}%</div>
-                    <div class="confidence-bar"><div class="fill" style="width:{min(conf,100)}%"></div></div>
-                </div>
-            </div>
-        </div>
-        <div class="result-card">
-            <div class="head">📖 辨证分析</div>
-            <div class="body">{result.get('analysis','')}</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    if result.get("treatment_principle") and result["treatment_principle"] not in ("无", ""):
-        st.markdown(f"""
-        <div class="result-card">
-            <div class="head">🎯 治疗原则</div>
-            <div class="body">{result['treatment_principle']}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    formula = result.get("formula", "")
-    if formula and formula not in ("无", "待推荐"):
-        st.markdown(f"""
-        <div class="result-card">
-            <div class="head">💊 推荐方剂</div>
-            <div class="formula">{formula}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    if result.get("formula_adjustment") and result["formula_adjustment"] not in ("无", ""):
-        st.markdown(f"""
-        <div class="result-card" style="border-left:3px solid var(--c-amber)">
-            <div class="head" style="color:#8B6A2E">🧩 加减建议</div>
-            <div class="body">{result['formula_adjustment']}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    if result.get("additional_notes") and result["additional_notes"] not in ("无", ""):
-        st.markdown(f"""
-        <div class="result-card" style="border-left:3px solid var(--c-warning)">
-            <div class="head" style="color:#A8782E">💡 提示</div>
-            <div class="body">{result['additional_notes']}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-
 def _render_result_card(sess):
     """聊天窗外的最终结果卡（紧凑模式）"""
     result = sess["result"]
@@ -1140,147 +1063,6 @@ def _render_result_card(sess):
         </div>
     </div>
     """, unsafe_allow_html=True)
-
-
-def _maybe_diagnose(sess, engine):
-    """判断是否可以直接辨证，否则生成追问。"""
-    # 防御：engine 不可用时直接走规则辨证
-    if engine is None or not hasattr(engine, "should_ask_followup"):
-        _finalize_diagnosis(sess, engine)
-        return
-    # 修正：round_count 是"已追问过的轮数"，用 sess["round"] 才是对的
-    # （旧的 len(pending_questions) 语义错乱，会让第二轮立刻强制收尾）
-    try:
-        followup = engine.should_ask_followup(
-            sess["chief_complaint"], sess["symptoms"],
-            sess["tongue_sign"], sess["pulse_sign"],
-            round_count=sess.get("round", 0),
-        )
-    except Exception as e:
-        # 追问判断失败 → 直接收尾
-        from datetime import datetime as _dt
-        sess["messages"].append({
-            "role": "assistant",
-            "kind": "message",
-            "content": f"⚠️ 追问判断异常：{str(e)[:120]}，将直接进行辨证。",
-            "ts": _dt.now().strftime("%H:%M:%S"),
-        })
-        _finalize_diagnosis(sess, engine)
-        return
-    from datetime import datetime as _dt
-    if not followup or not isinstance(followup, dict):
-        _finalize_diagnosis(sess, engine)
-        return
-    if followup.get("need_followup"):
-        sess["pending_questions"] = followup.get("questions", []) or []
-        msg_lines = [f"为了更准确地辨证，我需要再了解几项信息："]
-        for q in sess["pending_questions"]:
-            label = q.get("label", str(q))
-            msg_lines.append(f"• {label}")
-        sess["messages"].append({
-            "role": "assistant",
-            "kind": "followup",
-            "content": "\n".join(msg_lines),
-            "ts": _dt.now().strftime("%H:%M:%S"),
-        })
-    else:
-        _finalize_diagnosis(sess, engine)
-
-
-def _apply_followup_answer(sess, q, opt, engine):
-    """处理追问回答：把答案写回对应字段，清除该追问，再判断是否还要继续"""
-    from datetime import datetime as _dt
-    field = q["field"]
-    # 写回 session 字段
-    if field in ("tongue_sign", "pulse_sign"):
-        sess[field] = opt
-    elif field == "cold_hot":
-        if "畏寒" in opt or "寒" in opt:
-            if "畏寒" not in sess["symptoms"]:
-                sess["symptoms"].append("畏寒肢冷")
-        elif "热" in opt and "畏寒" in opt:
-            pass  # 往来寒热
-        elif "热" in opt:
-            if "畏热" not in sess["symptoms"]:
-                sess["symptoms"].append("畏热")
-    elif field == "sweat":
-        if "无汗" in opt and "无汗" not in sess["symptoms"]:
-            sess["symptoms"].append("无汗")
-        elif "自汗" in opt and "自汗" not in sess["symptoms"]:
-            sess["symptoms"].append("自汗")
-        elif "盗汗" in opt and "盗汗" not in sess["symptoms"]:
-            sess["symptoms"].append("盗汗")
-    elif field == "stool_urine":
-        if "稀溏" in opt and "腹泻" not in sess["symptoms"]:
-            sess["symptoms"].append("腹泻")
-        elif "干结" in opt and "便秘" not in sess["symptoms"]:
-            sess["symptoms"].append("便秘")
-        elif "短赤" in opt and "小便短赤" not in sess["symptoms"]:
-            sess["symptoms"].append("小便短赤")
-    # 记录用户回答
-    sess["messages"].append({
-        "role": "user",
-        "kind": "followup_answer",
-        "content": f"**{q['label']}** → {opt}",
-        "ts": _dt.now().strftime("%H:%M:%S"),
-    })
-    # 移除该 field
-    sess["pending_questions"] = [x for x in sess["pending_questions"] if x["field"] != field]
-    # 继续判断
-    if sess["pending_questions"]:
-        sess["round"] += 1
-        # 还有追问，等用户继续
-    else:
-        sess["round"] += 1
-        _finalize_diagnosis(sess, engine)
-
-
-def _finalize_diagnosis(sess, engine):
-    """输出最终辨证结果"""
-    from datetime import datetime as _dt
-    # 防御：engine 不可用 → 走一个最小的兜底结果
-    if engine is None or not hasattr(engine, "analyze_symptoms"):
-        result = {
-            "syndrome": "诊断暂不可用",
-            "syndrome_category": "系统错误",
-            "analysis": "AI 引擎未就绪，请前往「系统设置」配置 API Key。",
-            "formula": "—", "formula_adjustment": "—",
-            "treatment_principle": "—", "confidence": 0,
-            "additional_notes": "💡 请先在系统设置中配置 API Key，再开始辨证。",
-        }
-    else:
-        try:
-            result = engine.analyze_symptoms(
-                sess["chief_complaint"], sess["symptoms"],
-                sess["tongue_sign"], sess["pulse_sign"],
-            )
-            if not isinstance(result, dict):
-                result = {"syndrome": "诊断失败", "syndrome_category": "未知",
-                          "analysis": str(result)[:200], "formula": "—",
-                          "formula_adjustment": "—", "treatment_principle": "—",
-                          "confidence": 0, "additional_notes": "请重试或检查 API 配置。"}
-        except Exception as e:
-            result = {"syndrome": "诊断异常", "syndrome_category": "未知错误",
-                      "analysis": f"辨证过程异常：{str(e)[:200]}", "formula": "—",
-                      "formula_adjustment": "—", "treatment_principle": "—",
-                      "confidence": 0, "additional_notes": "请稍后重试或截图联系开发者。"}
-    sess["result"] = result
-    is_ok = result.get("confidence", 0) > 0
-    text = "✅ 辨证完成" if is_ok else "❌ 辨证失败"
-    sess["messages"].append({
-        "role": "assistant",
-        "kind": "diagnosis",
-        "content": result,
-        "ts": _dt.now().strftime("%H:%M:%S"),
-    })
-    # 额外附加一条简短结论
-    short = f"**{text}**\n\n**证型**：{result.get('syndrome','')}\n**方剂**：{result.get('formula','')}（置信度 {result.get('confidence',0)}%）"
-    sess["messages"].append({
-        "role": "assistant",
-        "kind": "message",
-        "content": short,
-        "ts": _dt.now().strftime("%H:%M:%S"),
-    })
 
 
 def _save_chat_session(sess):
