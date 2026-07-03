@@ -46,16 +46,19 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap');
 
     :root {
-        --c-primary: #0F7A6A;
-        --c-primary-soft: #E6F2EF;
-        --c-primary-dark: #0A5A4D;
-        --c-amber: #D4A24A;
-        --c-amber-soft: #FBF3E3;
-        --c-ink: #1F2933;
-        --c-ink-soft: #5A6573;
-        --c-bg: #FAF8F3;
-        --c-bg-card: #FFFFFF;
-        --c-line: #EAE5D9;
+        --c-primary: #0D6B5B;
+        --c-primary-soft: #E5F1EC;
+        --c-primary-dark: #06483D;
+        --c-amber: #C9963D;
+        --c-amber-soft: #F8EFD9;
+        --c-vermilion: #B95C45;
+        --c-blue: #456F8C;
+        --c-ink: #202925;
+        --c-ink-soft: #64706B;
+        --c-bg: #F7F3EA;
+        --c-bg-card: #FFFDF8;
+        --c-surface: #FFFDF8;
+        --c-line: #E3DACB;
         --c-success: #4FAE7A;
         --c-warning: #E0A24A;
         --c-danger: #D85A5A;
@@ -63,21 +66,23 @@ st.markdown("""
         --shadow-md: 0 2px 6px rgba(31, 41, 51, 0.05), 0 6px 16px rgba(31, 41, 51, 0.06);
         --shadow-lg: 0 4px 12px rgba(31, 41, 51, 0.06), 0 16px 32px rgba(31, 41, 51, 0.08);
         --radius-sm: 8px;
-        --radius-md: 14px;
-        --radius-lg: 20px;
-        --radius-xl: 28px;
+        --radius-md: 10px;
+        --radius-lg: 14px;
+        --radius-xl: 18px;
     }
 
     html, body, .stApp, [data-testid="stAppViewContainer"], [class*="css"] {
         font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
     }
 
-    /* ===== 全局背景：米白底 + 极淡山水纹理 ===== */
+    /* ===== 全局背景：宣纸底 + 克制纹理 ===== */
     .stApp {
-        background: #FAF8F3;
+        background: var(--c-bg);
         background-image:
-            radial-gradient(circle at 0% 0%, rgba(15, 122, 106, 0.04) 0%, transparent 50%),
-            radial-gradient(circle at 100% 100%, rgba(212, 162, 74, 0.05) 0%, transparent 50%);
+            linear-gradient(90deg, rgba(13, 107, 91, 0.035) 1px, transparent 1px),
+            linear-gradient(0deg, rgba(185, 92, 69, 0.025) 1px, transparent 1px),
+            linear-gradient(135deg, #F9F6EE 0%, #F3EEE2 100%);
+        background-size: 34px 34px, 34px 34px, auto;
     }
 
     [data-testid="stAppViewContainer"] > .main {
@@ -94,47 +99,50 @@ st.markdown("""
     .hero-wrap {
         position: relative;
         margin-bottom: 1.6rem;
-        padding: 1.6rem 2rem;
-        background: linear-gradient(135deg, #FFFFFF 0%, #F2F1E8 100%);
+        padding: 1.7rem 2rem;
+        background:
+            linear-gradient(135deg, rgba(255, 253, 248, 0.96) 0%, rgba(242, 237, 226, 0.96) 100%),
+            repeating-linear-gradient(90deg, rgba(13, 107, 91, 0.08) 0 1px, transparent 1px 18px);
         border: 1px solid var(--c-line);
+        border-top: 4px solid var(--c-primary-dark);
         border-radius: var(--radius-lg);
-        box-shadow: var(--shadow-sm);
+        box-shadow: var(--shadow-md);
         overflow: hidden;
     }
     .hero-wrap::before {
         content: '';
         position: absolute;
-        top: -60px; right: -60px;
-        width: 220px; height: 220px;
-        background: radial-gradient(circle, rgba(15, 122, 106, 0.12), transparent 70%);
-        border-radius: 50%;
+        left: 0; top: 0; bottom: 0;
+        width: 7px;
+        background: linear-gradient(180deg, var(--c-primary-dark), var(--c-amber), var(--c-vermilion));
     }
     .hero-wrap::after {
         content: '';
-        position: absolute;
-        bottom: -80px; right: 120px;
-        width: 180px; height: 180px;
-        background: radial-gradient(circle, rgba(212, 162, 74, 0.10), transparent 70%);
-        border-radius: 50%;
+        position: absolute; right: 1.2rem; bottom: 1rem;
+        width: 180px; height: 42px;
+        border-top: 1px solid rgba(13, 107, 91, 0.16);
+        border-bottom: 1px solid rgba(201, 150, 61, 0.18);
+        transform: skewX(-18deg);
+        opacity: 0.75;
     }
     .hero-brand {
         display: flex; align-items: center; gap: 0.9rem;
         position: relative; z-index: 1;
     }
     .hero-logo {
-        width: 48px; height: 48px;
-        background: linear-gradient(135deg, #0F7A6A, #14A892);
-        border-radius: 14px;
+        width: 50px; height: 50px;
+        background: linear-gradient(135deg, var(--c-primary-dark), var(--c-primary));
+        border-radius: 12px;
         display: flex; align-items: center; justify-content: center;
         font-size: 1.6rem; color: white;
-        box-shadow: 0 4px 12px rgba(15, 122, 106, 0.25);
+        box-shadow: 0 8px 18px rgba(6, 72, 61, 0.22);
     }
     .hero-text h1 {
         margin: 0 !important;
         font-size: 1.65rem !important;
         font-weight: 700 !important;
         color: var(--c-ink) !important;
-        letter-spacing: -0.3px;
+        letter-spacing: 0;
     }
     .hero-text p {
         margin: 0.2rem 0 0 0;
@@ -147,7 +155,8 @@ st.markdown("""
     }
     .hero-tag {
         font-size: 0.78rem; padding: 0.25rem 0.7rem;
-        background: var(--c-primary-soft); color: var(--c-primary-dark);
+        background: rgba(229, 241, 236, 0.9); color: var(--c-primary-dark);
+        border: 1px solid rgba(13, 107, 91, 0.13);
         border-radius: 999px; font-weight: 500;
     }
     .hero-tag.amber { background: var(--c-amber-soft); color: #8B6A2E; }
@@ -170,10 +179,11 @@ st.markdown("""
         gap: 0.9rem; margin-bottom: 1.6rem;
     }
     .quick-card {
-        background: white; border: 1px solid var(--c-line);
-        border-radius: var(--radius-md); padding: 1.1rem;
+        background: rgba(255, 253, 248, 0.94); border: 1px solid var(--c-line);
+        border-radius: var(--radius-md); padding: 1.05rem 1.1rem;
         display: flex; align-items: center; gap: 0.9rem;
         transition: all 0.25s ease; cursor: default;
+        box-shadow: var(--shadow-sm);
     }
     .quick-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--c-primary); }
     .quick-icon {
@@ -183,8 +193,8 @@ st.markdown("""
     }
     .quick-icon.green { background: var(--c-primary-soft); color: var(--c-primary-dark); }
     .quick-icon.amber { background: var(--c-amber-soft); color: #8B6A2E; }
-    .quick-icon.blue { background: #E8EFF7; color: #3A6B9E; }
-    .quick-icon.purple { background: #EFE6F2; color: #7A4E8C; }
+    .quick-icon.blue { background: #E8EFF7; color: var(--c-blue); }
+    .quick-icon.purple { background: #F2E8E4; color: var(--c-vermilion); }
     .quick-info .label { font-size: 0.78rem; color: var(--c-ink-soft); }
     .quick-info .value { font-size: 1.15rem; font-weight: 600; color: var(--c-ink); }
 
@@ -196,6 +206,7 @@ st.markdown("""
         padding: 1.4rem;
         margin-bottom: 1.2rem;
         box-shadow: var(--shadow-sm);
+        backdrop-filter: blur(4px);
     }
     .card-title {
         display: flex; align-items: center; gap: 0.6rem;
@@ -218,6 +229,7 @@ st.markdown("""
         border-radius: var(--radius-md);
         border: 1px solid var(--c-line);
         box-shadow: var(--shadow-sm);
+        border-bottom: 2px solid rgba(13, 107, 91, 0.08);
         position: sticky; top: 0; z-index: 50;
     }
     .stTabs [data-baseweb="tab"] {
@@ -232,7 +244,7 @@ st.markdown("""
         background: var(--c-primary-soft);
     }
     .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, #0F7A6A, #14A892) !important;
+        background: linear-gradient(135deg, var(--c-primary-dark), var(--c-primary)) !important;
         color: white !important;
         box-shadow: 0 2px 8px rgba(15, 122, 106, 0.3);
     }
@@ -469,6 +481,13 @@ st.markdown("""
         overflow: hidden; border: 1px solid var(--c-line);
     }
 
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        background: rgba(255, 253, 248, 0.96) !important;
+        border-color: var(--c-line) !important;
+        border-radius: var(--radius-md) !important;
+        box-shadow: var(--shadow-sm);
+    }
+
     /* ===== 移动端 ===== */
     @media (max-width: 768px) {
         .quick-grid { grid-template-columns: repeat(2, 1fr); }
@@ -681,7 +700,7 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋  智能问诊", "📊  数据分析", "📚  知识库", "🌿  中药库", "⚙️  系统设置"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📋  智能问诊", "📊  数据分析", "📚  知识库", "⚙️  系统设置"])
 
     with tab1:
         render_consultation_tab(engine)
@@ -690,8 +709,6 @@ def main():
     with tab3:
         render_knowledge_tab()
     with tab4:
-        render_herb_tab()
-    with tab5:
         render_settings_tab()
 
 def render_consultation_tab(engine):
@@ -901,25 +918,7 @@ def render_consultation_tab(engine):
             sess["pulse_sign"] = selected_pulse if selected_pulse != "请选择" else ""
 
         # 合并十问歌数据到症状列表
-        ten_symptoms = []
-        for key, val in sess["ten_asks_data"].items():
-            if isinstance(val, dict):
-                if "parts" in val:
-                    ten_symptoms.extend(val.get("parts", []))
-                elif "type" in val and val["type"]:
-                    ten_symptoms.append(val["type"])
-                elif "stool" in val and val.get("stool"):
-                    ten_symptoms.append(f"大便{val['stool']}")
-                elif "urine" in val and val.get("urine"):
-                    ten_symptoms.append(f"小便{val['urine']}")
-                elif "appetite" in val and val.get("appetite"):
-                    ten_symptoms.append(val["appetite"])
-                elif "thirst" in val and val.get("thirst"):
-                    ten_symptoms.append(val["thirst"])
-                elif "quality" in val and val.get("quality"):
-                    ten_symptoms.append(val["quality"])
-            elif isinstance(val, str) and val:
-                ten_symptoms.append(val)
+        ten_symptoms = _collect_ten_asks_symptoms(sess.get("ten_asks_data", {}))
 
         # 合并到症状列表（去重）
         current_symptoms = sess.get("symptoms", [])
@@ -965,7 +964,7 @@ def render_consultation_tab(engine):
         <div class="card-title"><div class="ti">🩺</div>诊断结果</div>
         """, unsafe_allow_html=True)
 
-        # 显示诊断结果
+        # 显示诊断结果 / 追问引导
         if sess.get("result"):
             _render_result_card(sess)
             csave, cclear = st.columns(2)
@@ -980,8 +979,37 @@ def render_consultation_tab(engine):
                 if st.button("🔄 重新开始", use_container_width=True, key="restart_result"):
                     _reset_chat_session()
                     st.rerun()
+        elif sess.get("pending_questions"):
+            st.markdown("""
+            <div class="followup-block">
+                <div class="q-label">请补充以下关键问诊信息</div>
+            </div>
+            """, unsafe_allow_html=True)
+            pending_answers = {}
+            for idx, question in enumerate(sess.get("pending_questions", [])):
+                options = question.get("options", [])
+                if not options:
+                    continue
+                answer_key = f"followup_{sess.get('session_id', 'session')}_{idx}_{question.get('field', 'field')}"
+                pending_answers[idx] = st.selectbox(
+                    question.get("label", "请补充信息"),
+                    options,
+                    key=answer_key,
+                )
+            csubmit, cskip = st.columns(2)
+            with csubmit:
+                if st.button("✅ 提交补充信息", type="primary", use_container_width=True, key="submit_followup"):
+                    for idx, question in enumerate(list(sess.get("pending_questions", []))):
+                        answer = pending_answers.get(idx)
+                        _apply_followup_answer(sess, question, answer, engine)
+                    st.rerun()
+            with cskip:
+                if st.button("直接辨证", use_container_width=True, key="skip_followup"):
+                    sess["pending_questions"] = []
+                    _finalize_diagnosis(sess, engine)
+                    st.rerun()
         else:
-            st.info("👈 请在左侧填写问诊信息后，点击「开始诊断」")
+            st.info("👈 请在左侧填写问诊信息后，点击「开始问诊」")
 
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -990,14 +1018,19 @@ def render_consultation_tab(engine):
         if not sess["chief_complaint"].strip():
             st.toast("⚠️ 请先填写主诉", icon="⚠️")
         else:
-            # 收集症状并直接辨证
             symptoms = _collect_symptoms_from_ten_asks(sess)
-            result = engine.analyze_symptoms(
+            sess["symptoms"] = symptoms
+            followup = engine.should_ask_followup(
                 sess["chief_complaint"], symptoms,
                 sess.get("tongue_sign", ""), sess.get("pulse_sign", ""),
+                sess.get("round", 0),
             )
-            sess["result"] = result
-            sess["saved"] = False
+            if followup.get("need_followup"):
+                sess["pending_questions"] = followup.get("questions", [])
+                sess["result"] = None
+                sess["saved"] = False
+            else:
+                _finalize_diagnosis(sess, engine)
             st.rerun()
 
     if reset_clicked:
@@ -1005,29 +1038,47 @@ def render_consultation_tab(engine):
         st.rerun()
 
 
-def _collect_symptoms_from_ten_asks(sess):
-    """从十问歌数据 + 手动选择症状 收集完整症状列表"""
+def _collect_ten_asks_symptoms(ten):
+    """从十问歌结构化数据中收集所有有辨证意义的症状。"""
     symptoms = []
-    # 十问歌结构化数据（键名是 ten_asks_data，见 line 796-797）
-    ten = sess.get("ten_asks_data", {})
+    neutral_values = {"", "请选择", "正常", "无", "无不适", "不清楚", "无明显偏向"}
+
+    def append_value(value, prefix=""):
+        if value is None:
+            return
+        value = str(value).strip()
+        if not value or value in neutral_values:
+            return
+        symptoms.append(f"{prefix}{value}" if prefix else value)
+
     for key, val in ten.items():
         if isinstance(val, dict):
             if "parts" in val:
-                symptoms.extend([p for p in val.get("parts", []) if p and p != "无不适"])
-            elif "type" in val and val["type"] and val["type"] != "请选择":
-                symptoms.append(val["type"])
-            elif "stool" in val and val.get("stool") and val["stool"] != "正常":
-                symptoms.append(f"大便{val['stool']}")
-            elif "urine" in val and val.get("urine") and val["urine"] != "正常":
-                symptoms.append(f"小便{val['urine']}")
-            elif "appetite" in val and val.get("appetite") and val["appetite"] != "正常":
-                symptoms.append(val["appetite"])
-            elif "thirst" in val and val.get("thirst") and val["thirst"] != "正常":
-                symptoms.append(val["thirst"])
-            elif "quality" in val and val.get("quality") and val["quality"] != "正常":
-                symptoms.append(val["quality"])
+                for part in val.get("parts", []):
+                    append_value(part)
+            if "symptoms" in val:
+                for symptom in val.get("symptoms", []):
+                    append_value(symptom)
+            append_value(val.get("type"))
+            append_value(val.get("stool"), "大便")
+            append_value(val.get("urine"), "小便")
+            append_value(val.get("appetite"))
+            append_value(val.get("thirst"))
+            append_value(val.get("taste"))
+            append_value(val.get("quality"))
+            append_value(val.get("cycle"), "月经")
+            append_value(val.get("flow"), "经量")
+            append_value(val.get("color"), "经色")
+            append_value(val.get("pain"))
         elif isinstance(val, str) and val:
-            symptoms.append(val)
+            append_value(val)
+    return symptoms
+
+
+def _collect_symptoms_from_ten_asks(sess):
+    """从十问歌数据 + 手动选择症状 收集完整症状列表"""
+    # 十问歌结构化数据（键名是 ten_asks_data，见 line 796-797）
+    symptoms = _collect_ten_asks_symptoms(sess.get("ten_asks_data", {}))
     # 合并手动多选的症状（st.multiselect 的值存在 sess["symptoms"]）
     manual = sess.get("symptoms", []) or []
     all_symptoms = list(set(symptoms + [s for s in manual if s]))
@@ -1037,6 +1088,60 @@ def _collect_symptoms_from_ten_asks(sess):
 # ---------------------------------------------------------------------------
 # 多轮问诊 — 内部辅助函数
 # ---------------------------------------------------------------------------
+def _finalize_diagnosis(sess, engine):
+    """汇总当前会话信息并生成最终辨证结果。"""
+    symptoms = _collect_symptoms_from_ten_asks(sess)
+    sess["symptoms"] = symptoms
+    sess["pending_questions"] = []
+    sess["result"] = engine.analyze_symptoms(
+        sess.get("chief_complaint", ""),
+        symptoms,
+        sess.get("tongue_sign", ""),
+        sess.get("pulse_sign", ""),
+    )
+    sess["saved"] = False
+
+
+def _apply_followup_answer(sess, question, answer, engine):
+    """把追问答案写回会话；全部追问完成后自动生成辨证结果。"""
+    if not question or not answer:
+        return
+
+    field = question.get("field", "")
+    answer = str(answer).strip()
+    if not answer:
+        return
+
+    if field == "tongue_sign":
+        sess["tongue_sign"] = answer
+    elif field == "pulse_sign":
+        sess["pulse_sign"] = answer
+    else:
+        symptoms = sess.setdefault("symptoms", [])
+        if answer not in symptoms and answer not in ("正常", "无明显偏向"):
+            symptoms.append(answer)
+
+    remaining = []
+    for item in sess.get("pending_questions", []):
+        same_field = item.get("field") == field
+        same_label = item.get("label") == question.get("label")
+        if not (same_field and same_label):
+            remaining.append(item)
+    sess["pending_questions"] = remaining
+
+    if "messages" in sess:
+        sess["messages"].append({
+            "role": "user",
+            "kind": "followup_answer",
+            "content": f"{question.get('label', '补充信息')} {answer}",
+            "ts": datetime.now().strftime("%H:%M:%S"),
+        })
+
+    if not sess.get("pending_questions"):
+        sess["round"] = int(sess.get("round", 0) or 0) + 1
+        _finalize_diagnosis(sess, engine)
+
+
 def _render_result_card(sess):
     """聊天窗外的最终结果卡（紧凑模式）"""
     result = sess["result"]
@@ -1280,6 +1385,99 @@ def render_analytics_tab():
     st.dataframe(df_list, use_container_width=True, height=320)
     st.markdown('</div>', unsafe_allow_html=True)
 
+
+def _safe_text(value, fallback="—"):
+    """把知识库字段统一转成可展示文本，避免 None/空字符串撑坏页面。"""
+    text = str(value or "").strip()
+    return text if text else fallback
+
+
+def _render_native_cards(items, renderer):
+    """用 Streamlit 原生组件渲染知识库卡片，避免 HTML 源码被当文本显示。"""
+    for row_start in range(0, len(items), 2):
+        cols = st.columns(2)
+        for offset, item in enumerate(items[row_start:row_start + 2]):
+            with cols[offset]:
+                with st.container(border=True):
+                    renderer(item)
+
+
+def _render_formula_card(formula):
+    name = _safe_text(formula.get("name"), "未命名")
+    category = _safe_text(formula.get("category"))
+    source = _safe_text(formula.get("source"))
+    st.markdown(f"#### 📜 {name}")
+    st.caption(f"{category} · {source}")
+    st.markdown(f"**组成：** {_safe_text(formula.get('composition'))}")
+    st.markdown(f"**功效：** {_safe_text(formula.get('function'))}")
+    st.markdown(f"**主治：** {_safe_text(formula.get('indication'))}")
+
+
+def _render_syndrome_card(syndrome):
+    name = _safe_text(syndrome.get("name"), "未命名")
+    st.markdown(f"#### 🩺 {name}")
+    st.caption(_safe_text(syndrome.get("category")))
+    st.markdown(f"**主要症状：** {_safe_text(syndrome.get('symptoms'))}")
+    st.markdown(f"**舌象：** {_safe_text(syndrome.get('tongue'))}")
+    st.markdown(f"**脉象：** {_safe_text(syndrome.get('pulse'))}")
+    st.markdown(f"**推荐方剂：** {_safe_text(syndrome.get('formula'))}")
+    st.markdown(f"**治法：** {_safe_text(syndrome.get('treatment'))}")
+
+
+def _render_herb_card(herb, meridian):
+    name = _safe_text(herb.get("name"), "未命名")
+    nature = _safe_text(herb.get("nature"))
+    flavor = _safe_text(herb.get("flavor"))
+    st.markdown(f"#### 🌿 {name}")
+    st.caption(f"性 {nature} · 味 {flavor} · {meridian}")
+    st.markdown(f"**用量：** {_safe_text(herb.get('dosage'))}")
+    st.markdown(f"**功效：** {_safe_text(herb.get('function'))}")
+    st.markdown(f"**主治：** {_safe_text(herb.get('indication'))}")
+    st.markdown(f"**使用注意：** {_safe_text(herb.get('caution') or herb.get('contraindication'))}")
+
+
+def _render_diagnosis_system_tab():
+    """原生渲染辨证体系说明，避免 HTML 表格源码被显示。"""
+    st.markdown("### 📖 辨证体系说明")
+    st.caption("从经典框架到临床落点，把证候归纳成可检索、可比较的结构。")
+
+    st.markdown("#### 🔄 六经辨证（《伤寒论》）")
+    st.write("六经辨证将外感热病分为六个阶段，是中医临床辨证的奠基框架。")
+    six_channel_df = pd.DataFrame([
+        {"经络": "太阳", "证型": "表证", "主要表现": "恶寒发热、头痛身痛", "代表方剂": "麻黄汤、桂枝汤", "病机": "风寒袭表"},
+        {"经络": "阳明", "证型": "里实热证", "主要表现": "但热不寒、大汗大渴", "代表方剂": "白虎汤、承气汤", "病机": "里热炽盛"},
+        {"经络": "少阳", "证型": "半表半里", "主要表现": "往来寒热、口苦咽干", "代表方剂": "小柴胡汤", "病机": "枢机不利"},
+        {"经络": "太阴", "证型": "里虚寒证", "主要表现": "腹满吐利、喜温喜按", "代表方剂": "理中丸", "病机": "脾阳不振"},
+        {"经络": "少阴", "证型": "心肾虚证", "主要表现": "畏寒蜷卧或心烦不寐", "代表方剂": "四逆汤、黄连阿胶汤", "病机": "心肾阳虚/阴虚"},
+        {"经络": "厥阴", "证型": "寒热错杂", "主要表现": "消渴、气上撞心", "代表方剂": "乌梅丸", "病机": "阴阳对峙"},
+    ])
+    st.table(six_channel_df)
+
+    st.markdown("#### 🏥 脏腑辨证")
+    organ_items = [
+        ("心系", "心气虚、心血虚、心火亢盛、心血瘀阻"),
+        ("肝系", "肝气郁结、肝火上炎、肝血虚、肝阳上亢"),
+        ("脾系", "脾气虚、脾阳虚、脾不统血、寒湿困脾、湿热蕴脾"),
+        ("肺系", "肺气虚、肺阴虚、风寒犯肺、风热犯肺、痰热壅肺"),
+        ("肾系", "肾阳虚、肾阴虚、肾精不足、肾不纳气"),
+    ]
+    organ_cols = st.columns(2)
+    for idx, (name, desc) in enumerate(organ_items):
+        with organ_cols[idx % 2]:
+            with st.container(border=True):
+                st.markdown(f"#### {name}")
+                st.write(desc)
+
+    st.markdown("#### 🌡️ 卫气营血辨证（温病学）")
+    warm_disease_df = pd.DataFrame([
+        {"分期": "卫分", "病位": "肌表", "主要表现": "发热微恶风寒", "治法": "辛凉解表", "代表方剂": "银翘散"},
+        {"分期": "气分", "病位": "脏腑", "主要表现": "壮热不恶寒", "治法": "清气泄热", "代表方剂": "白虎汤"},
+        {"分期": "营分", "病位": "营阴", "主要表现": "身热夜甚、心烦", "治法": "清营透热", "代表方剂": "清营汤"},
+        {"分期": "血分", "病位": "血分", "主要表现": "出血、发斑", "治法": "凉血散血", "代表方剂": "犀角地黄汤"},
+    ])
+    st.table(warm_disease_df)
+
+
 def render_knowledge_tab():
     st.markdown("""
     <div class="card">
@@ -1290,7 +1488,7 @@ def render_knowledge_tab():
     </div>
     """, unsafe_allow_html=True)
 
-    tab1, tab2, tab3 = st.tabs(["💊  方剂库", "🩺  证型库", "📖  辨证体系"])
+    tab1, tab2, tab3, tab4 = st.tabs(["💊  方剂库", "🩺  证型库", "📖  辨证体系", "🌿  中药库"])
 
     with tab1:
         st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -1324,30 +1522,7 @@ def render_knowledge_tab():
             </div>
             """, unsafe_allow_html=True)
         else:
-            cards_html = '<div class="grid">'
-            for f in filtered:
-                name = f.get("name", "未命名")
-                category = f.get("category", "")
-                source = f.get("source", "")
-                composition = f.get("composition", "")
-                function = f.get("function", "")
-                indication = f.get("indication", "")
-                cards_html += f'''
-                <div class="grid-card">
-                    <div class="head">
-                        <div class="name">📜 {name}</div>
-                    </div>
-                    <div class="meta">
-                        {f'<span class="chip">{category}</span>' if category else ''}
-                        {f'<span class="chip amber">{source}</span>' if source else ''}
-                    </div>
-                    <div class="body"><b>组成：</b>{composition}</div>
-                    <div class="body"><b>功效：</b>{function}</div>
-                    <div class="body"><b>主治：</b>{indication}</div>
-                </div>
-                '''
-            cards_html += '</div>'
-            st.markdown(cards_html, unsafe_allow_html=True)
+            _render_native_cards(filtered, _render_formula_card)
         st.markdown('</div>', unsafe_allow_html=True)
 
     with tab2:
@@ -1377,91 +1552,14 @@ def render_knowledge_tab():
             </div>
             """, unsafe_allow_html=True)
         else:
-            cards_html = '<div class="grid">'
-            for s in filtered:
-                name = s.get("name", "未命名")
-                category = s.get("category", "")
-                symptoms = s.get("symptoms", "")
-                tongue = s.get("tongue", "")
-                pulse = s.get("pulse", "")
-                formula = s.get("formula", "")
-                treatment = s.get("treatment", "")
-                cards_html += f'''
-                <div class="grid-card">
-                    <div class="head">
-                        <div class="name">🩺 {name}</div>
-                    </div>
-                    <div class="meta">{f'<span class="chip">{category}</span>' if category else ''}</div>
-                    <div class="body"><b>主要症状：</b>{symptoms}</div>
-                    <div class="body"><b>舌象：</b>{tongue}</div>
-                    <div class="body"><b>脉象：</b>{pulse}</div>
-                    <div class="body"><b>推荐方剂：</b><span style="color:var(--c-primary); font-weight:600">{formula}</span></div>
-                    <div class="body"><b>治法：</b>{treatment}</div>
-                </div>
-                '''
-            cards_html += '</div>'
-            st.markdown(cards_html, unsafe_allow_html=True)
+            _render_native_cards(filtered, _render_syndrome_card)
         st.markdown('</div>', unsafe_allow_html=True)
 
     with tab3:
-        st.markdown("""
-        <div class="card">
-            <div class="card-title"><div class="ti">📖</div>辨证体系说明</div>
+        _render_diagnosis_system_tab()
 
-            <h3 style="color:var(--c-primary-dark); margin-top:1.2rem">🔄 六经辨证（《伤寒论》）</h3>
-            <p style="color:var(--c-ink-soft); line-height:1.7">
-            六经辨证是《伤寒论》的核心辨证体系，将外感热病分为六个阶段，是中医临床的奠基之作。
-            </p>
-            <table style="width:100%; border-collapse:collapse; margin-top:0.8rem; font-size:0.88rem">
-                <thead>
-                    <tr style="background:var(--c-primary-soft); color:var(--c-primary-dark)">
-                        <th style="padding:0.6rem; text-align:left; border-radius:8px 0 0 0">经络</th>
-                        <th style="padding:0.6rem; text-align:left">证型</th>
-                        <th style="padding:0.6rem; text-align:left">主要表现</th>
-                        <th style="padding:0.6rem; text-align:left">代表方剂</th>
-                        <th style="padding:0.6rem; text-align:left; border-radius:0 8px 0 0">病机</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr style="border-bottom:1px solid var(--c-line)"><td style="padding:0.6rem"><b>太阳</b></td><td>表证</td><td>恶寒发热、头痛身痛</td><td>麻黄汤、桂枝汤</td><td>风寒袭表</td></tr>
-                    <tr style="border-bottom:1px solid var(--c-line); background:#FBFAF4"><td style="padding:0.6rem"><b>阳明</b></td><td>里实热证</td><td>但热不寒、大汗大渴</td><td>白虎汤、承气汤</td><td>里热炽盛</td></tr>
-                    <tr style="border-bottom:1px solid var(--c-line)"><td style="padding:0.6rem"><b>少阳</b></td><td>半表半里</td><td>往来寒热、口苦咽干</td><td>小柴胡汤</td><td>枢机不利</td></tr>
-                    <tr style="border-bottom:1px solid var(--c-line); background:#FBFAF4"><td style="padding:0.6rem"><b>太阴</b></td><td>里虚寒证</td><td>腹满吐利、喜温喜按</td><td>理中丸</td><td>脾阳不振</td></tr>
-                    <tr style="border-bottom:1px solid var(--c-line)"><td style="padding:0.6rem"><b>少阴</b></td><td>心肾虚证</td><td>畏寒蜷卧或心烦不寐</td><td>四逆汤、黄连阿胶汤</td><td>心肾阳虚/阴虚</td></tr>
-                    <tr><td style="padding:0.6rem"><b>厥阴</b></td><td>寒热错杂</td><td>消渴、气上撞心</td><td>乌梅丸</td><td>阴阳对峙</td></tr>
-                </tbody>
-            </table>
-
-            <h3 style="color:var(--c-primary-dark); margin-top:1.5rem">🏥 脏腑辨证</h3>
-            <p style="color:var(--c-ink-soft); line-height:1.7">脏腑辨证是根据脏腑的生理功能和病理特点，对疾病进行辨证的方法：</p>
-            <ul style="color:var(--c-ink); line-height:1.9">
-                <li><b>心系</b>：心气虚、心血虚、心火亢盛、心血瘀阻</li>
-                <li><b>肝系</b>：肝气郁结、肝火上炎、肝血虚、肝阳上亢</li>
-                <li><b>脾系</b>：脾气虚、脾阳虚、脾不统血、寒湿困脾、湿热蕴脾</li>
-                <li><b>肺系</b>：肺气虚、肺阴虚、风寒犯肺、风热犯肺、痰热壅肺</li>
-                <li><b>肾系</b>：肾阳虚、肾阴虚、肾精不足、肾不纳气</li>
-            </ul>
-
-            <h3 style="color:var(--c-primary-dark); margin-top:1.5rem">🌡️ 卫气营血辨证（温病学）</h3>
-            <table style="width:100%; border-collapse:collapse; margin-top:0.8rem; font-size:0.88rem">
-                <thead>
-                    <tr style="background:var(--c-amber-soft); color:#8B6A2E">
-                        <th style="padding:0.6rem; text-align:left; border-radius:8px 0 0 0">分期</th>
-                        <th style="padding:0.6rem; text-align:left">病位</th>
-                        <th style="padding:0.6rem; text-align:left">主要表现</th>
-                        <th style="padding:0.6rem; text-align:left">治法</th>
-                        <th style="padding:0.6rem; text-align:left; border-radius:0 8px 0 0">代表方剂</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr style="border-bottom:1px solid var(--c-line)"><td style="padding:0.6rem"><b>卫分</b></td><td>肌表</td><td>发热微恶风寒</td><td>辛凉解表</td><td>银翘散</td></tr>
-                    <tr style="border-bottom:1px solid var(--c-line); background:#FBFAF4"><td style="padding:0.6rem"><b>气分</b></td><td>脏腑</td><td>壮热不恶寒</td><td>清气泄热</td><td>白虎汤</td></tr>
-                    <tr style="border-bottom:1px solid var(--c-line)"><td style="padding:0.6rem"><b>营分</b></td><td>营阴</td><td>身热夜甚、心烦</td><td>清营透热</td><td>清营汤</td></tr>
-                    <tr><td style="padding:0.6rem"><b>血分</b></td><td>血分</td><td>出血、发斑</td><td>凉血散血</td><td>犀角地黄汤</td></tr>
-                </tbody>
-            </table>
-        </div>
-        """, unsafe_allow_html=True)
+    with tab4:
+        render_herb_tab()
 
 def render_herb_tab():
     st.markdown("""
@@ -1512,35 +1610,7 @@ def render_herb_tab():
         </div>
         """, unsafe_allow_html=True)
     else:
-        cards_html = '<div class="grid">'
-        for h in filtered:
-            name = h.get("name", "未命名")
-            nature = h.get("nature", "—") or "—"
-            flavor = h.get("flavor", "—") or "—"
-            meridian = _herb_meridian(h) or "—"
-            dosage = h.get("dosage", "—") or "—"
-            function = h.get("function", "—") or "—"
-            # caution 是禁忌（数据里是这个 key），不是 contraindication
-            caution = h.get("caution") or h.get("contraindication") or "—"
-            indication = h.get("indication", "—") or "—"
-            cards_html += f'''
-            <div class="grid-card">
-                <div class="head">
-                    <div class="name">🌿 {name}</div>
-                </div>
-                <div class="meta">
-                    <span class="chip">性 {nature}</span>
-                    <span class="chip">味 {flavor}</span>
-                    <span class="chip amber">{meridian}</span>
-                </div>
-                <div class="body"><b>用量：</b>{dosage}</div>
-                <div class="body"><b>功效：</b>{function}</div>
-                <div class="body"><b>主治：</b>{indication}</div>
-                <div class="body"><b>使用注意：</b>{caution}</div>
-            </div>
-            '''
-        cards_html += '</div>'
-        st.markdown(cards_html, unsafe_allow_html=True)
+        _render_native_cards(filtered, lambda herb: _render_herb_card(herb, _safe_text(_herb_meridian(herb))))
     st.markdown('</div>', unsafe_allow_html=True)
 
 def render_settings_tab():

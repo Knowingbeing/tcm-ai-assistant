@@ -11,7 +11,7 @@
 |------|-----|
 | 项目名称 | 中医AI智能问诊助手 |
 | 本地路径 | `D:\用户文件勿删\Desktop\中医AI智能问诊助手` |
-| GitHub | `https://github.com/shenjianwei/tcm-ai-assistant.git` |
+| GitHub | `https://github.com/Knowingbeing/tcm-ai-assistant.git` |
 | 技术栈 | Python 3.12+ / Streamlit 1.30+ / Supabase / OpenAI SDK |
 | 部署方式 | Streamlit Cloud（自动从 GitHub main 分支部署） |
 | 作者 | 沈建伟（厦门大学 邹至庄经济研究院 数量经济学硕士 / 医学院 中医学本科） |
@@ -110,7 +110,7 @@ load_records.clear()  ← 清除缓存，数据分析 Tab 立即可见
 
 - **清新山水风格**：主色荷绿 `#0F7A6A`，辅色琥珀 `#D4A24A`，背景米白 `#FAF8F3`
 - CSS 变量定义在 `app.py` 顶部 `<style>` 块（line 38-486）
-- 4 个 Tab：📋 智能问诊 / 📊 数据分析 / 📚 知识库 / 🌿 中药库 / ⚙️ 系统设置
+- 4 个主 Tab：📋 智能问诊 / 📊 数据分析 / 📚 知识库 / ⚙️ 系统设置；中药库已合并到知识库子 Tab
 - 所有自定义样式通过 `st.markdown(..., unsafe_allow_html=True)` 注入
 
 ---
