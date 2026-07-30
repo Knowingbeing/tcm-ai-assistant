@@ -37,6 +37,16 @@ create table if not exists consultations (
     confidence           integer     default 0 check (confidence between 0 and 100),
     source               text        default 'manual' check (source in ('manual', 'api', 'imported', 'chat', 'draft')),
     messages             jsonb       default '[]'::jsonb,
+    structured_symptoms  jsonb       default '{}'::jsonb,
+    followups            jsonb       default '[]'::jsonb,
+    retrieval_ids        jsonb       default '[]'::jsonb,
+    prompt_version       text        default '',
+    model_name           text        default '',
+    structured_result    jsonb       default '{}'::jsonb,
+    safety_tags          jsonb       default '[]'::jsonb,
+    handoff_required     boolean     default false,
+    handoff_reason       text        default '',
+    model_status         text        default '',
     created_at           timestamptz not null default now()
 );
 create index if not exists idx_consultations_created_at on consultations (created_at desc);

@@ -1,178 +1,136 @@
 # 中医 AI 智能问诊助手
 
-基于 LLM 的中医智能问诊系统，围绕「十问歌结构化采集 → AI 辨证 → 方剂推荐 → 数据沉淀」构建完整问诊流程。
+基于 Python、Streamlit、OpenAI 兼容 SDK、Supabase 与本地 JSON 的中医知识辅助产品。系统用于结构化采集问诊信息、检索本地中医知识、辅助整理辨证思路与风险提示，不替代执业医师，不提供可直接照方服药的处方服务。
 
-![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)
-![Streamlit](https://img.shields.io/badge/Streamlit-1.30+-red.svg)
-![Supabase](https://img.shields.io/badge/Supabase-Cloud-3ECF8E?logo=supabase)
-![License](https://img.shields.io/badge/License-MIT-green.svg)
+## 当前版本
 
-## 项目亮点
+v2.2：十问歌结构化问诊 + 最多两轮受限追问 + RAG 知识检索 + 医疗安全规则 + 结构化输出校验 + Supabase/JSON 双存储。
 
-- **十问歌结构化问诊**：寒热、汗出、头身、二便、饮食口味、睡眠、旧病、病因、女性经期等信息分阶段采集。
-- **AI 辨证引擎**：支持 DeepSeek、OpenAI、通义千问、文心一言、讯飞星火、智谱 GLM、Moonshot 等 7 家厂商。
-- **轻量追问闭环**：信息不足时自动追问舌象、脉象、寒热、汗出、二便等关键项，再生成最终辨证。
-- **双存储后端**：Supabase 云端优先，未配置时自动回退到项目内 JSON 文件。
-- **知识库一体化**：方剂库、证型库、辨证体系、中药库统一收纳在「知识库」Tab。
-- **诊断与排错面板**：Supabase 连接诊断、保存失败原因透传、缓存刷新机制均已内置。
+## 已实现功能
 
-## 功能模块
+- 结构化问诊：基于十问歌分阶段采集寒热、汗、头身、胸腹、饮食、二便、睡眠、情志、旧病、病因、舌象、脉象等信息。
+- 提交前摘要：展示主诉、症状、舌脉、信息完整度与缺失字段。
+- 受限追问：根据信息完整度最多追问 2 轮，每轮最多 2 个问题，已填写信息不重复询问。
+- 真正 RAG：把方剂、证型和中药整理成统一知识 Schema，按关键词、同义词与字段权重动态检索 Top-K，并把命中内容注入模型上下文。
+- 结构化输出：固定 Schema 包含信息完整度、可能证型、辨证体系、分析依据、知识引用、治法知识、风险提示、置信度、人工接管和是否建议立即就医。
+- 医疗安全：模型调用前独立识别胸痛、呼吸困难、意识障碍、大量出血、高热不退、孕期高风险、特殊年龄、严重过敏、自伤风险、处方替代请求和信息严重不足。
+- 结果页：展示症状摘要、缺失信息、可能证型、引用知识来源、治法知识、风险提示、模型状态、保存和重新问诊入口。
+- 知识库运营：按证型、方剂、中药浏览与搜索，统一 Schema 维护视图，重复检测，检索验证和 JSON 导出。
+- 数据看板：问诊数量、证型分布、时间趋势、高频症状、低置信度、安全拦截、人工接管、模型失败、知识引用和检索无结果等指标。
+- 双存储：Supabase 优先，本地 JSON 兜底，两种存储保持一致的核心记录结构。
 
-### 智能问诊
-
-- 患者基础信息、主诉、伴随症状、舌象、脉象录入
-- 十问歌结构化表单辅助补全四诊信息
-- 自动判断是否需要追问，最多补充关键问题后输出辨证
-- 生成证型、辨证体系、治法、推荐方剂、方剂加减、置信度与注意事项
-
-### 数据分析
-
-- 问诊总数、有效诊断、平均置信度、最新记录
-- 证型分布、辨证体系统计
-- 问诊记录表格浏览
-- 明确显示当前存储后端：Supabase 或本地 JSON
-
-### 知识库
-
-- **方剂库**：68 首经方/时方，支持名称、组成、类别、来源筛选
-- **证型库**：47 个常见证型，支持证型和症状检索
-- **辨证体系**：六经辨证、脏腑辨证、卫气营血辨证说明
-- **中药库**：87 味中药，支持药性、药味、归经筛选
-
-### 系统设置
-
-- AI 厂商、模型、API Key 配置
-- Supabase 存储状态和连接诊断
-- 本地/云端问诊记录管理
-
-## 技术架构
+## 架构
 
 ```text
 Streamlit UI
-    |
-    |-- 智能问诊 / 数据分析 / 知识库 / 系统设置
-    |
-Python 业务层
-    |
-    |-- app.py                 页面渲染、问诊流程、数据看板
-    |-- utils/llm_engine.py    LLM 辨证、追问判断、规则兜底
-    |-- utils/supabase_client.py  Supabase CRUD 与诊断
-    |
+  ├─ 智能问诊
+  ├─ 数据分析
+  ├─ 知识库
+  └─ 系统设置
+
+业务层
+  ├─ app.py                         页面与交互流程
+  ├─ core/diagnosis_service.py       安全 -> RAG -> 模型/降级编排
+  ├─ core/safety.py                  医疗安全规则
+  ├─ core/knowledge_retriever.py     统一知识 Schema 与 Top-K 检索
+  ├─ core/schemas.py                 结构化输入/输出校验
+  └─ utils/llm_engine.py             OpenAI 兼容模型调用与追问规则
+
 数据层
-    |
-    |-- data/tcm_data.py       方剂、证型、中药知识库
-    |-- data/ten_asks.py       十问歌结构化配置
-    |-- supabase/schema.sql    云端数据库结构
-    |-- data/*.json            本地兜底存储
+  ├─ data/tcm_data.py                方剂、证型、中药
+  ├─ data/ten_asks.py                十问歌字段配置
+  ├─ utils/supabase_client.py        Supabase 读写与诊断
+  └─ data/*.json                     本地兜底存储
 ```
 
-## 快速开始
+## RAG 链路
+
+1. 从 `data/tcm_data.py` 读取方剂、证型和中药。
+2. 转换为统一 Schema：`id/type/name/indications/syndrome_category/source/body/cautions/content_version/updated_at/enabled`。
+3. 根据主诉、症状、舌象和脉象进行关键词、同义词和字段权重检索。
+4. 返回 Top-K `KnowledgeHit`，包含知识 ID、类型、名称、来源、得分和命中词。
+5. 将 Top-K 内容注入模型 Prompt。
+6. 结果页展示引用知识名称、类型、来源和相关度。
+7. 未检索到可靠依据时，明确提示知识不足，不生成确定性结论。
+
+## 本地运行
 
 ```bash
-git clone https://github.com/Knowingbeing/tcm-ai-assistant.git
-cd tcm-ai-assistant
-
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
-应用启动后，在「系统设置」中填入 API Key 即可使用 AI 辨证。未配置 API Key 时，系统会使用规则兜底诊断，便于演示和本地测试。
+也可以使用 Streamlit Cloud 入口：
 
-## 可选配置
+```bash
+streamlit run streamlit_app.py
+```
 
-### Streamlit Secrets
+## 环境变量
 
-复制 `.streamlit/secrets.toml.example` 为 `.streamlit/secrets.toml`，再填写：
+复制 `.streamlit/secrets.toml.example` 为 `.streamlit/secrets.toml`，或在 Streamlit Cloud Secrets 中配置：
 
 ```toml
-DEEPSEEK_API_KEY = "sk-xxx"
-SUPABASE_URL = "https://your-project.supabase.co"
+OPENAI_API_KEY = "sk-..."
+DEEPSEEK_API_KEY = "sk-..."
+SUPABASE_URL = "https://your-project-ref.supabase.co"
 SUPABASE_KEY = "your-anon-key"
 ```
 
-也可以直接在应用的「系统设置」Tab 中填写 API Key。
+无 API Key 时，系统不会伪造 AI 结果，只显示本地知识辅助和明确的模型状态。
 
-### Supabase
+## Supabase 部署
 
-1. 在 Supabase 创建项目
-2. 在 SQL Editor 执行 `supabase/schema.sql`
-3. 如需多轮会话字段，执行 `supabase/migration_p1_session.sql`
-4. 配置 `SUPABASE_URL` 和 `SUPABASE_KEY`
+1. 在 Supabase 创建项目。
+2. 在 SQL Editor 执行 `supabase/schema.sql`。
+3. 如果是从 v2.1 升级，继续执行 `supabase/migration_v22_rag_safety.sql`。
+4. 在 Streamlit Secrets 或环境变量中配置 `SUPABASE_URL` 与 `SUPABASE_KEY`。
+5. 在应用「系统设置」页点击 Supabase 诊断，确认表、字段和写入权限正常。
 
-常见保存失败原因包括 RLS 拦截、表未创建、缺字段、CHECK 约束不匹配、Key 无效。应用内置「诊断 Supabase 连接」按钮用于定位问题。
+## Docker 部署
 
-## 项目结构
-
-```text
-tcm-ai-assistant/
-├── app.py                         # Streamlit 主应用
-├── streamlit_app.py               # Streamlit Cloud 入口
-├── requirements.txt               # Python 依赖
-├── README.md                      # GitHub 项目首页
-├── AGENTS.md                      # Codex 项目上下文
-├── LICENSE                        # MIT 许可证
-├── .env.example                   # 环境变量示例
-├── .streamlit/
-│   ├── config.toml                # Streamlit 主题配置
-│   └── secrets.toml.example       # secrets 模板
-├── data/
-│   ├── tcm_data.py                # 方剂/证型/中药知识库
-│   └── ten_asks.py                # 十问歌问诊配置
-├── utils/
-│   ├── llm_engine.py              # AI 辨证引擎
-│   ├── supabase_client.py         # Supabase 客户端
-│   └── database.py                # SQLite 旧版兼容模块
-├── supabase/
-│   ├── schema.sql                 # Supabase 建表脚本
-│   ├── migration_p1_session.sql   # 多轮会话字段迁移
-│   └── README.md                  # Supabase 部署说明
-├── scripts/
-│   ├── smoke_test.py              # 冒烟测试
-│   └── migrate_json_to_supabase.py
-└── knowledge_base/                # 项目文档中心
-    ├── 00_项目总览.md
-    ├── 01_系统架构与数据流.md
-    ├── 02_前端UI层.md
-    ├── 03_存储层.md
-    ├── 04_AI引擎层.md
-    ├── 05_数据层.md
-    ├── 06_数据库Schema.md
-    ├── 07_错误处理与诊断.md
-    ├── 08_RAG策略评估与优化方案.md
-    └── 09_部署与测试.md
+```bash
+docker build -t tcm-ai-assistant .
+docker run --rm -p 8501:8501 --env-file .env tcm-ai-assistant
 ```
 
-## 验证
+`.env` 示例：
 
-每次修改后建议执行：
+```env
+OPENAI_API_KEY=
+DEEPSEEK_API_KEY=
+SUPABASE_URL=
+SUPABASE_KEY=
+```
+
+## Streamlit Cloud 部署
+
+1. 将仓库推送到 GitHub。
+2. 在 Streamlit Cloud 新建应用，入口文件选择 `streamlit_app.py`。
+3. 在 Secrets 中粘贴 `.streamlit/secrets.toml.example` 对应字段。
+4. 部署后先打开「系统设置」页做 Supabase 诊断。
+
+## 验证
 
 ```bash
 python -c "import ast; ast.parse(open('app.py', encoding='utf-8').read()); print('[OK]')"
 python scripts/smoke_test.py
-python -m compileall app.py utils scripts data
+python -m compileall app.py utils scripts data core
 ```
 
-## 开发路线
+`scripts/smoke_test.py` 覆盖 15 类核心验收：十问歌、追问、RAG、Prompt 注入、引用一致性、结构化输出、模型失败、安全拦截、低置信度拒答、存储结构、历史会话、看板指标、密钥/隐私、无 Key 测试与检索评测。
 
-- [x] 十问歌结构化问诊
-- [x] 多厂商 AI 辨证引擎
-- [x] 规则兜底诊断
-- [x] 关键问题追问闭环
-- [x] Supabase + JSON 双后端
-- [x] 数据分析看板
-- [x] 一体化中医知识库
-- [x] Supabase 诊断面板
-- [ ] 病历导出 PDF / Word
-- [ ] ChromaDB 向量检索
-- [ ] 移动端细节优化
+## 演示病例
 
-## 作者
+演示病例位于 `core/demo_cases.py`：
 
-沈建伟
+- 信息较完整低风险病例：恶寒、无汗、头痛、舌苔薄白、脉浮紧。
+- 信息不足病例：咳嗽一周、痰多、缺舌脉，需要追问。
+- 急症拦截病例：突发胸痛伴呼吸困难，应中断普通问诊并建议及时就医。
 
-- 厦门大学 邹至庄经济研究院 数量经济学硕士
-- 厦门大学 医学院 中医学本科
+## 后续边界
 
-## 许可证
-
-本项目采用 MIT License，详见 [LICENSE](LICENSE)。
+- 当前 RAG v1 是关键词/同义词/字段权重检索，尚未接入 Embedding 或 ChromaDB。
+- 知识库运营页已支持浏览、检索、查重和导出，正式开放新增/编辑前还需要角色权限、审核流和版本记录。
+- 模型调用依赖用户配置的 OpenAI 兼容服务，真实线上稳定性需要结合厂商限流、超时和可用性继续观测。
+- 产品仅用于知识辅助和信息结构化，不适用于急危重症处理或替代线下诊疗。

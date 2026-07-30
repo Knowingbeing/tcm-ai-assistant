@@ -18,6 +18,7 @@ Supabase 客户端封装（云端持久化）
 """
 
 import os
+import json as _json
 import streamlit as st
 from typing import List, Dict, Optional
 
@@ -118,6 +119,63 @@ def get_records() -> List[Dict]:
             return []
 
 
+CONSULTATION_ALLOWED_FIELDS = {
+    "patient_id", "name", "age", "gender",
+    "chief_complaint", "symptoms",
+    "tongue_sign", "pulse_sign",
+    "syndrome", "syndrome_category",
+    "formula", "formula_adjustment",
+    "treatment_principle", "analysis",
+    "confidence", "source",
+    "session_id", "round_index", "messages",
+    "structured_symptoms", "followups", "retrieval_ids",
+    "prompt_version", "model_name", "structured_result",
+    "safety_tags", "handoff_required", "handoff_reason",
+    "model_status",
+}
+
+
+def _clean_json_field(val, default):
+    if val is None:
+        return default
+    if isinstance(val, str):
+        try:
+            return _json.loads(val)
+        except Exception:
+            return default
+    if isinstance(val, (list, dict)):
+        try:
+            _json.dumps(val, ensure_ascii=False)
+            return val
+        except Exception:
+            return default
+    return default
+
+
+def _normalize_consultation_payload(record: Dict) -> Dict:
+    """把问诊记录规整成 Supabase 与 JSON 共享的结构。"""
+    payload = {k: v for k, v in record.items() if k in CONSULTATION_ALLOWED_FIELDS}
+    payload["symptoms"] = _clean_json_field(payload.get("symptoms"), [])
+    for json_key, default in {
+        "messages": [],
+        "structured_symptoms": {},
+        "followups": [],
+        "retrieval_ids": [],
+        "structured_result": {},
+        "safety_tags": [],
+    }.items():
+        if json_key in payload:
+            payload[json_key] = _clean_json_field(payload.get(json_key), default)
+    if "confidence" in payload:
+        try:
+            payload["confidence"] = max(0, min(100, int(payload["confidence"])))
+        except Exception:
+            payload["confidence"] = 0
+    if not payload.get("chief_complaint"):
+        payload["chief_complaint"] = "(未填写)"
+    return payload
+
+
 def save_record(record: Dict) -> tuple:
     """插入单条问诊记录。
 
@@ -158,11 +216,23 @@ def save_record(record: Dict) -> tuple:
             "treatment_principle", "analysis",
             "confidence", "source",
             "session_id", "round_index", "messages",
+            "structured_symptoms", "followups", "retrieval_ids",
+            "prompt_version", "model_name", "structured_result",
+            "safety_tags", "handoff_required", "handoff_reason",
+            "model_status",
         }
         payload = {k: v for k, v in record.items() if k in allowed}
         payload["symptoms"] = _clean_json_field(payload.get("symptoms"), [])
-        if "messages" in payload:
-            payload["messages"] = _clean_json_field(payload.get("messages"), [])
+        for json_key, default in {
+            "messages": [],
+            "structured_symptoms": {},
+            "followups": [],
+            "retrieval_ids": [],
+            "structured_result": {},
+            "safety_tags": [],
+        }.items():
+            if json_key in payload:
+                payload[json_key] = _clean_json_field(payload.get(json_key), default)
         # confidence 约束：0-100，越界则截断
         if "confidence" in payload:
             try:
@@ -268,6 +338,9 @@ def diagnose_connection() -> dict:
         "tongue_sign", "pulse_sign", "syndrome", "syndrome_category",
         "formula", "formula_adjustment", "treatment_principle", "analysis",
         "confidence", "source", "messages", "created_at",
+        "structured_symptoms", "followups", "retrieval_ids",
+        "prompt_version", "model_name", "structured_result",
+        "safety_tags", "handoff_required", "handoff_reason", "model_status",
     }
     try:
         resp = client.table("consultations").select("*").limit(1).execute()

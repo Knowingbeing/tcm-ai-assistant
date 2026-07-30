@@ -20,6 +20,9 @@ from utils.supabase_client import (
 )
 from data.tcm_data import FORMULAS, SYNDROMES, HERBS
 from data.ten_asks import ALL_ASKS, TEN_ASKS, DEFAULT_TEN_ASKS, TONGUE_ASK, PULSE_ASK, MENSTRUATION_ASK
+from core.diagnosis_service import analyze_consultation
+from core.knowledge_retriever import TYPE_LABELS, build_knowledge_items, get_default_retriever
+from core.schemas import make_symptom_profile
 
 st.set_page_config(
     page_title="中医AI智能问诊助手",
@@ -743,6 +746,10 @@ def render_consultation_tab(engine):
         sess["pulse_sign"] = ""
         sess["patient"] = {"name": "匿名", "age": 30, "gender": "男"}
         sess["result"] = None
+        sess["followup_history"] = []
+        sess["asked_followup_fields"] = []
+        sess["retrieval_hits"] = []
+        sess["safety_assessment"] = {}
         # 欢迎语
         sess["messages"].append({
             "role": "assistant",
@@ -943,6 +950,27 @@ def render_consultation_tab(engine):
             key="chat_symptoms",
         )
 
+        profile_preview = make_symptom_profile(
+            sess.get("chief_complaint", ""),
+            _collect_symptoms_from_ten_asks(sess),
+            sess.get("tongue_sign", ""),
+            sess.get("pulse_sign", ""),
+            ten_asks_data=sess.get("ten_asks_data", {}),
+            patient=sess.get("patient", {}),
+            followups=sess.get("followup_history", []),
+        )
+        st.caption(f"问诊进度：{profile_preview['information_completeness']}%")
+        st.progress(profile_preview["information_completeness"] / 100)
+        with st.expander("提交前症状摘要", expanded=False):
+            st.write({
+                "主诉": profile_preview.get("chief_complaint", "") or "未填写",
+                "症状": profile_preview.get("symptoms", []),
+                "舌象": profile_preview.get("tongue_sign", "") or "未提供",
+                "脉象": profile_preview.get("pulse_sign", "") or "未提供",
+            })
+            if profile_preview.get("missing_fields"):
+                st.info("建议补充：" + "、".join(profile_preview["missing_fields"]))
+
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
@@ -1026,9 +1054,17 @@ def render_consultation_tab(engine):
                 sess.get("round", 0),
             )
             if followup.get("need_followup"):
-                sess["pending_questions"] = followup.get("questions", [])
+                asked = set(sess.get("asked_followup_fields", []))
+                questions = [q for q in followup.get("questions", []) if q.get("field") not in asked]
+                sess["pending_questions"] = questions[:2]
+                for q in sess["pending_questions"]:
+                    field = q.get("field")
+                    if field and field not in sess.setdefault("asked_followup_fields", []):
+                        sess["asked_followup_fields"].append(field)
                 sess["result"] = None
                 sess["saved"] = False
+                if not sess["pending_questions"]:
+                    _finalize_diagnosis(sess, engine)
             else:
                 _finalize_diagnosis(sess, engine)
             st.rerun()
@@ -1089,21 +1125,29 @@ def _collect_symptoms_from_ten_asks(sess):
 # 多轮问诊 — 内部辅助函数
 # ---------------------------------------------------------------------------
 def _finalize_diagnosis(sess, engine):
-    """汇总当前会话信息并生成最终辨证结果。"""
+    """汇总当前会话信息并生成最终辨证辅助结果。"""
     symptoms = _collect_symptoms_from_ten_asks(sess)
     sess["symptoms"] = symptoms
     sess["pending_questions"] = []
-    sess["result"] = engine.analyze_symptoms(
+    result = analyze_consultation(
+        engine,
         sess.get("chief_complaint", ""),
         symptoms,
         sess.get("tongue_sign", ""),
         sess.get("pulse_sign", ""),
+        ten_asks_data=sess.get("ten_asks_data", {}),
+        patient=sess.get("patient", {}),
+        followups=sess.get("followup_history", []),
+        top_k=8,
     )
+    sess["result"] = result
+    sess["retrieval_hits"] = result.get("retrieval_hits", [])
+    sess["safety_assessment"] = result.get("safety_assessment", {})
     sess["saved"] = False
 
 
 def _apply_followup_answer(sess, question, answer, engine):
-    """把追问答案写回会话；全部追问完成后自动生成辨证结果。"""
+    """把追问答案写回会话；最多两轮追问后自动生成辨证辅助结果。"""
     if not question or not answer:
         return
 
@@ -1120,6 +1164,17 @@ def _apply_followup_answer(sess, question, answer, engine):
         symptoms = sess.setdefault("symptoms", [])
         if answer not in symptoms and answer not in ("正常", "无明显偏向"):
             symptoms.append(answer)
+        ten_data = sess.setdefault("ten_asks_data", {})
+        if field == "cold_hot":
+            ten_data[field] = {"type": answer, "detail": ""}
+        elif field == "sweat":
+            ten_data[field] = {"type": answer, "detail": ""}
+        elif field == "stool_urine":
+            block = ten_data.get("stool_urine", {})
+            if not isinstance(block, dict):
+                block = {}
+            block["stool"] = answer
+            ten_data["stool_urine"] = block
 
     remaining = []
     for item in sess.get("pending_questions", []):
@@ -1136,38 +1191,134 @@ def _apply_followup_answer(sess, question, answer, engine):
             "content": f"{question.get('label', '补充信息')} {answer}",
             "ts": datetime.now().strftime("%H:%M:%S"),
         })
+    sess.setdefault("followup_history", []).append({
+        "round": int(sess.get("round", 0) or 0) + 1,
+        "field": field,
+        "question": question.get("label", ""),
+        "answer": answer,
+    })
+    sess.setdefault("asked_followup_fields", [])
+    if field and field not in sess["asked_followup_fields"]:
+        sess["asked_followup_fields"].append(field)
 
     if not sess.get("pending_questions"):
         sess["round"] = int(sess.get("round", 0) or 0) + 1
+        if sess["round"] < 2:
+            symptoms = _collect_symptoms_from_ten_asks(sess)
+            followup = engine.should_ask_followup(
+                sess.get("chief_complaint", ""),
+                symptoms,
+                sess.get("tongue_sign", ""),
+                sess.get("pulse_sign", ""),
+                round_count=sess["round"],
+            )
+            asked = set(sess.get("asked_followup_fields", []))
+            questions = [q for q in followup.get("questions", []) if q.get("field") not in asked]
+            if questions:
+                sess["pending_questions"] = questions[:2]
+                for q in sess["pending_questions"]:
+                    q_field = q.get("field")
+                    if q_field and q_field not in sess.setdefault("asked_followup_fields", []):
+                        sess["asked_followup_fields"].append(q_field)
+                if "messages" in sess:
+                    sess["messages"].append({
+                        "role": "assistant",
+                        "kind": "followup",
+                        "content": "还需要补充 1-2 项关键信息，以减少误判。",
+                        "ts": datetime.now().strftime("%H:%M:%S"),
+                    })
+                return
         _finalize_diagnosis(sess, engine)
 
 
 def _render_result_card(sess):
-    """聊天窗外的最终结果卡（紧凑模式）"""
+    """结果页：症状摘要、结构化结果、知识引用与安全提示。"""
     result = sess["result"]
-    is_ok = result.get("confidence", 0) > 0
-    cls = "" if is_ok else " fail"
     conf = result.get("confidence", 0)
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-    st.markdown(f"""
-    <div class="result-stack">
-        <div class="result-hero{cls}">
-            <div class="label">{'✅ 最终辨证' if is_ok else '❌ 辨证失败'}</div>
-            <div class="value">🩺 {result.get('syndrome','')}</div>
-            <div class="row">
-                <div class="col">
-                    <div class="lab">辨证体系</div>
-                    <div class="val">{result.get('syndrome_category','待分类')}</div>
-                </div>
-                <div class="col">
-                    <div class="lab">置信度</div>
-                    <div class="val">{conf}%</div>
-                    <div class="confidence-bar"><div class="fill" style="width:{min(conf,100)}%"></div></div>
-                </div>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    if result.get("immediate_care_recommended"):
+        st.error("已命中急症或高风险信号：请及时联系急救或前往正规医疗机构。")
+    elif result.get("handoff_required") or result.get("needs_human_handoff"):
+        st.warning(result.get("handoff_reason") or "建议人工确认后再理解结果。")
+    else:
+        st.success("已生成中医知识辅助结果。")
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("可能证型", result.get("syndrome", "暂不形成确定性结论"))
+    c2.metric("辨证体系", result.get("syndrome_category", "待确认"))
+    c3.metric("置信度", f"{conf}%")
+    st.progress(min(100, max(0, int(conf or 0))) / 100)
+
+    profile = result.get("symptom_profile") or make_symptom_profile(
+        sess.get("chief_complaint", ""),
+        sess.get("symptoms", []),
+        sess.get("tongue_sign", ""),
+        sess.get("pulse_sign", ""),
+        ten_asks_data=sess.get("ten_asks_data", {}),
+        patient=sess.get("patient", {}),
+        followups=sess.get("followup_history", []),
+    )
+    with st.expander("症状摘要", expanded=True):
+        st.write({
+            "主诉": profile.get("chief_complaint", ""),
+            "伴随症状": profile.get("symptoms", []),
+            "舌象": profile.get("tongue_sign", "") or "未提供",
+            "脉象": profile.get("pulse_sign", "") or "未提供",
+            "信息完整度": f"{profile.get('information_completeness', 0)}%",
+        })
+        missing = result.get("missing_fields") or profile.get("missing_fields", [])
+        if missing:
+            st.info("仍缺少：" + "、".join(missing))
+
+    possible = result.get("possible_syndromes") or []
+    if possible:
+        with st.expander("可能证型", expanded=True):
+            rows = []
+            for item in possible:
+                rows.append({
+                    "证型": item.get("name", ""),
+                    "体系": item.get("category", ""),
+                    "置信度": item.get("confidence", 0),
+                    "依据": item.get("basis", ""),
+                })
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+    with st.expander("分析依据与治法知识", expanded=True):
+        for basis in result.get("analysis_basis", []) or [result.get("analysis", "")]:
+            if basis:
+                st.markdown(f"- {basis}")
+        if result.get("treatment_principle"):
+            st.markdown(f"**治法说明：** {result.get('treatment_principle')}")
+        if result.get("formula"):
+            st.markdown(f"**相关方剂知识：** {result.get('formula')}（知识参考，非处方）")
+
+    refs = result.get("knowledge_references") or []
+    hits = result.get("retrieval_hits") or []
+    if refs or hits:
+        with st.expander("引用知识来源", expanded=True):
+            rows = []
+            source_items = refs or hits
+            for item in source_items:
+                rows.append({
+                    "ID": item.get("id", ""),
+                    "类型": item.get("type", ""),
+                    "名称": item.get("name", ""),
+                    "来源": item.get("source", ""),
+                    "相关度": round(float(item.get("score", 0) or item.get("matched_score", 0) or 0), 2),
+                })
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    else:
+        st.warning("本次未检索到可靠知识依据，因此不生成确定性结论。")
+
+    warnings = result.get("risk_warnings") or []
+    if warnings:
+        with st.expander("风险提示", expanded=True):
+            for warning in warnings:
+                st.markdown(f"- {warning}")
+    st.caption(
+        f"模型状态：{result.get('model_status', 'unknown')} · Prompt版本：{result.get('prompt_version', '')} · "
+        "本产品仅用于知识辅助和信息结构化，不替代执业医师。"
+    )
 
 
 def _save_chat_session(sess):
@@ -1195,6 +1346,16 @@ def _save_chat_session(sess):
         "confidence": int(result.get("confidence", 0) or 0),
         "source": "chat",
         "messages": sess.get("messages", []),
+        "structured_symptoms": result.get("symptom_profile", {}),
+        "followups": sess.get("followup_history", []),
+        "retrieval_ids": result.get("retrieval_ids", []),
+        "prompt_version": result.get("prompt_version", ""),
+        "model_name": result.get("model_name", ""),
+        "structured_result": result,
+        "safety_tags": result.get("safety_tags", []),
+        "handoff_required": bool(result.get("handoff_required") or result.get("needs_human_handoff")),
+        "handoff_reason": result.get("handoff_reason", ""),
+        "model_status": result.get("model_status", ""),
     }
     saved = False
     if supabase_configured():
@@ -1253,6 +1414,22 @@ def _save_draft_session(sess):
         "confidence": 0,
         "source": "draft",
         "messages": sess.get("messages", []),
+        "structured_symptoms": {
+            "chief_complaint": sess.get("chief_complaint", ""),
+            "symptoms": sess.get("symptoms", []),
+            "tongue_sign": sess.get("tongue_sign", ""),
+            "pulse_sign": sess.get("pulse_sign", ""),
+            "ten_asks_data": sess.get("ten_asks_data", {}),
+        },
+        "followups": sess.get("followup_history", []),
+        "retrieval_ids": [],
+        "prompt_version": "",
+        "model_name": "",
+        "structured_result": {},
+        "safety_tags": [],
+        "handoff_required": False,
+        "handoff_reason": "",
+        "model_status": "draft",
     }
     if supabase_configured():
         ok, err = _sb_save_record(record)
@@ -1314,6 +1491,11 @@ def render_analytics_tab():
     )
     valid = [r for r in records if r.get("confidence", 0) > 0]
     avg_conf = sum(r.get("confidence", 0) for r in valid) / len(valid) if valid else 0
+    low_conf = [r for r in records if int(r.get("confidence", 0) or 0) < 60 and r.get("source") != "draft"]
+    safety_cases = [r for r in records if r.get("safety_tags")]
+    handoff_cases = [r for r in records if r.get("handoff_required")]
+    model_failed = [r for r in records if str(r.get("model_status", "")).startswith("model_failed")]
+    no_retrieval = [r for r in records if r.get("source") != "draft" and not r.get("retrieval_ids")]
 
     col1, col2, col3, col4 = st.columns(4)
     with col1: st.metric("📋 总问诊数", len(records))
@@ -1322,6 +1504,14 @@ def render_analytics_tab():
     with col4:
         last_date = records[-1].get("date", "")[:10] if records else "无"
         st.metric("🕐 最新记录", last_date)
+
+    q1, q2, q3, q4, q5 = st.columns(5)
+    total = max(1, len(records))
+    q1.metric("低置信度案例", len(low_conf))
+    q2.metric("安全拦截案例", len(safety_cases))
+    q3.metric("人工接管比例", f"{len(handoff_cases) / total:.0%}")
+    q4.metric("模型失败率", f"{len(model_failed) / total:.0%}")
+    q5.metric("检索无结果比例", f"{len(no_retrieval) / total:.0%}")
 
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
@@ -1488,7 +1678,7 @@ def render_knowledge_tab():
     </div>
     """, unsafe_allow_html=True)
 
-    tab1, tab2, tab3, tab4 = st.tabs(["💊  方剂库", "🩺  证型库", "📖  辨证体系", "🌿  中药库"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["💊  方剂库", "🩺  证型库", "📖  辨证体系", "🌿  中药库", "🛠️  运营维护"])
 
     with tab1:
         st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -1560,6 +1750,87 @@ def render_knowledge_tab():
 
     with tab4:
         render_herb_tab()
+
+    with tab5:
+        render_knowledge_ops_tab()
+
+
+def render_knowledge_ops_tab():
+    st.markdown("#### 统一知识 Schema")
+    items = build_knowledge_items()
+    keyword = st.text_input("搜索知识条目", placeholder="输入证型、方剂、中药、症状或来源", key="ops_knowledge_search")
+    type_filter = st.multiselect(
+        "知识类型",
+        list(TYPE_LABELS.keys()),
+        default=list(TYPE_LABELS.keys()),
+        format_func=lambda x: TYPE_LABELS.get(x, x),
+        key="ops_knowledge_type",
+    )
+    filtered = []
+    for item in items:
+        text = " ".join([item.name, item.type, item.indications, item.syndrome_category, item.source, item.body, item.cautions])
+        if item.type in type_filter and (not keyword or keyword in text):
+            filtered.append(item)
+
+    rows = [{
+        "ID": item.id,
+        "类型": TYPE_LABELS.get(item.type, item.type),
+        "名称": item.name,
+        "适用症状或证候": item.indications,
+        "辨证体系/分类": item.syndrome_category,
+        "来源": item.source,
+        "注意事项": item.cautions,
+        "版本": item.content_version,
+        "更新时间": item.updated_at,
+        "启用": item.enabled,
+    } for item in filtered]
+    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+    names = {}
+    duplicates = []
+    for item in items:
+        key = (item.type, item.name)
+        if key in names:
+            duplicates.append(f"{TYPE_LABELS.get(item.type, item.type)}：{item.name}")
+        names[key] = names.get(key, 0) + 1
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("统一知识条目", len(items))
+    c2.metric("当前筛选结果", len(filtered))
+    c3.metric("重复知识", len(duplicates))
+    if duplicates:
+        st.warning("发现重复条目：" + "、".join(duplicates[:20]))
+    else:
+        st.success("未发现同类型同名重复知识。")
+
+    st.markdown("#### 检索验证")
+    test_query = st.text_input("检索测试", value=keyword or "恶寒无汗头痛", key="ops_retrieval_query")
+    hits = get_default_retriever().retrieve(test_query, [], "", "", top_k=5)
+    if hits:
+        st.table(pd.DataFrame([{
+            "排名": i + 1,
+            "ID": hit.item.id,
+            "类型": TYPE_LABELS.get(hit.item.type, hit.item.type),
+            "名称": hit.item.name,
+            "来源": hit.item.source,
+            "得分": round(hit.score, 2),
+            "命中词": "、".join(hit.matched_terms[:6]),
+        } for i, hit in enumerate(hits)]))
+    else:
+        st.info("未检索到结果。")
+
+    st.download_button(
+        "导出统一知识库 JSON",
+        data=json.dumps([item.to_dict() for item in items], ensure_ascii=False, indent=2),
+        file_name="tcm_knowledge_unified.json",
+        mime="application/json",
+        use_container_width=True,
+        key="download_unified_knowledge",
+    )
+    with st.expander("新增/编辑校验说明"):
+        st.markdown(
+            "当前版本将运营维护放在受保护页面预留区：正式开放写入前，应接入角色权限、字段校验、版本变更记录和审核流程。"
+        )
 
 def render_herb_tab():
     st.markdown("""

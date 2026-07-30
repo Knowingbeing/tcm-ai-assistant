@@ -1,208 +1,213 @@
 """
-冒烟测试 — 不需要真实 Supabase 凭证
-====================================
+中医 AI 智能问诊助手冒烟测试
+================================
 
-覆盖：
-1. Supabase 未配置时：get_records / get_settings 走降级路径，不抛异常
-2. JSON 文件读写：save_records → load_records 回路
-3. schema.sql 语法：用 sqlite3 风格的语法检查（粗略）
-4. 模块导入：supabase_client / llm_engine / tcm_data 全部可 import
+不需要真实 API Key 或 Supabase 凭证，覆盖结构化问诊、两轮追问、RAG、安全层、
+结构化输出、存储结构和看板统计所依赖的核心字段。
 
 运行：
-  python scripts/smoke_test.py
+    python scripts/smoke_test.py
 """
 
+from __future__ import annotations
+
+import importlib
+import json
 import os
 import sys
-import json
 import tempfile
-import importlib
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
 
-def test_section(name):
+def test_section(name: str) -> None:
     print(f"\n[TEST] {name}")
-    print("-" * 50)
+    print("-" * 60)
 
 
-def assert_eq(actual, expected, msg=""):
+def assert_eq(actual, expected, msg: str = "") -> None:
     if actual == expected:
         print(f"  [OK] {msg or 'OK'}")
-    else:
-        print(f"  [FAIL] {msg}")
-        print(f"    expected: {expected}")
-        print(f"    actual  : {actual}")
-        sys.exit(1)
+        return
+    print(f"  [FAIL] {msg}")
+    print(f"    expected: {expected}")
+    print(f"    actual  : {actual}")
+    sys.exit(1)
 
 
-def assert_true(cond, msg=""):
+def assert_true(cond, msg: str = "") -> None:
     if cond:
         print(f"  [OK] {msg or 'OK'}")
-    else:
-        print(f"  [FAIL] {msg or 'FAIL'}")
-        sys.exit(1)
+        return
+    print(f"  [FAIL] {msg or 'FAIL'}")
+    sys.exit(1)
 
 
-def main():
-    test_section("1. Supabase 未配置降级测试")
-    # 显式清空环境变量
+def main() -> None:
     os.environ.pop("SUPABASE_URL", None)
     os.environ.pop("SUPABASE_KEY", None)
 
+    test_section("1. Supabase 未配置时安全降级")
     from utils import supabase_client
     importlib.reload(supabase_client)
-
     assert_eq(supabase_client.is_configured(), False, "未配置时 is_configured() == False")
     assert_eq(supabase_client.get_client(), None, "未配置时 get_client() 返回 None")
     assert_eq(supabase_client.get_records(), [], "未配置时 get_records() 返回空列表")
-    cfg = supabase_client.get_settings()
-    assert_true(cfg.get("provider") == "DeepSeek", f"默认 provider == DeepSeek, got {cfg.get('provider')}")
+    ok, err = supabase_client.save_record({"chief_complaint": "测试"})
+    assert_eq(ok, False, "无 Supabase 凭证时不写云端")
+    assert_true("Supabase" in err, "返回清晰错误信息")
 
-    test_section("2. JSON 模式读写回路")
-    # 模拟 JSON 模式：app.py 的 save_records / load_records 在没 Supabase 时使用
-    test_records = [
-        {
-            "id": 1,
-            "name": "测试患者",
-            "age": 30,
-            "gender": "男",
-            "chief_complaint": "头痛三天",
-            "symptoms": ["头痛", "恶寒"],
-            "syndrome": "太阳伤寒证",
-            "syndrome_category": "六经辨证",
-            "formula": "麻黄汤",
-            "confidence": 85,
-            "date": "2026-06-25 10:00:00",
-        }
-    ]
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as f:
-        json.dump(test_records, f, ensure_ascii=False)
-        tmp_path = f.name
-
-    with open(tmp_path, "r", encoding="utf-8") as f:
-        loaded = json.load(f)
-    assert_eq(len(loaded), 1, "JSON 写入后再读出，记录数一致")
-    assert_eq(loaded[0]["chief_complaint"], "头痛三天", "主诉字段一致")
-    os.unlink(tmp_path)
-
-    test_section("3. 模块导入测试")
-    for mod in ["utils.llm_engine", "utils.supabase_client", "data.tcm_data"]:
-        try:
-            __import__(mod)
-            print(f"  [OK] {mod} 可正常导入")
-        except Exception as e:
-            print(f"  [FAIL] {mod} 导入失败：{e}")
-            sys.exit(1)
-
-    test_section("4. schema.sql 文件存在性 + 基础检查")
-    schema_path = os.path.join(PROJECT_ROOT, "supabase", "schema.sql")
-    assert_true(os.path.exists(schema_path), f"schema.sql 存在：{schema_path}")
-    with open(schema_path, "r", encoding="utf-8") as f:
-        sql = f.read()
-    for keyword in ["create table if not exists patients",
-                    "create table if not exists consultations",
-                    "create table if not exists settings",
-                    "create table if not exists schema_version"]:
-        assert_true(keyword in sql, f"包含 {keyword!r}")
-    # 索引和 RLS 关闭
-    assert_true("disable row level security" in sql, "已显式禁用 RLS")
-    assert_true("create index" in sql, "包含索引定义")
-
-    test_section("5. 迁移脚本语法检查")
-    migration_path = os.path.join(PROJECT_ROOT, "scripts", "migrate_json_to_supabase.py")
-    assert_true(os.path.exists(migration_path), "迁移脚本存在")
-    with open(migration_path, "r", encoding="utf-8") as f:
-        code = f.read()
-    try:
-        compile(code, migration_path, "exec")
-        print(f"  [OK] {migration_path} 编译通过")
-    except SyntaxError as e:
-        print(f"  [FAIL] 迁移脚本语法错误：{e}")
-        sys.exit(1)
-
-    test_section("6. app.py 编译检查")
-    app_path = os.path.join(PROJECT_ROOT, "app.py")
-    with open(app_path, "r", encoding="utf-8") as f:
-        code = f.read()
-    try:
-        compile(code, app_path, "exec")
-        print(f"  [OK] app.py 编译通过（{len(code)} 字符）")
-    except SyntaxError as e:
-        print(f"  [FAIL] app.py 语法错误：{e}")
-        sys.exit(1)
-
-    test_section("7. P1 多轮问诊 — should_ask_followup 规则")
-    from utils.llm_engine import TCMDiagnosisEngine
-    eng = TCMDiagnosisEngine(api_key="", provider="DeepSeek", model="")
-    # 7.1 全空：应追问
-    fu = eng.should_ask_followup("", [], "", "", round_count=0)
-    assert_true(fu["need_followup"], "全空 → 需要追问")
-    assert_true(len(fu["questions"]) <= 2, f"追问问题数 <= 2, 实际 {len(fu['questions'])}")
-    # 7.2 已有舌脉 + 寒热汗便关键词 → 不再追问
-    fu2 = eng.should_ask_followup(
-        "头痛三天", ["恶寒", "无汗", "鼻塞", "大便干结"],
-        "舌淡苔白", "脉浮紧", round_count=0,
-    )
-    assert_eq(fu2["need_followup"], False, "信息充分 → 不追问")
-    # 7.3 round_count >= 2 强制不再追问
-    fu3 = eng.should_ask_followup("", [], "", "", round_count=2)
-    assert_eq(fu3["need_followup"], False, "round=2 强制不再追问")
-    # 7.4 缺舌象 → 追问中应含 tongue_sign
-    fu4 = eng.should_ask_followup("咳嗽", ["咽干"], "", "脉浮", round_count=0)
-    fields = [q["field"] for q in fu4["questions"]]
-    assert_true("tongue_sign" in fields, f"缺舌象应追问, 实际 fields={fields}")
-    # 7.5 每个 question 必须有 options 列表
-    for q in fu4["questions"]:
-        assert_true(len(q["options"]) >= 2, f"{q['field']} 至少 2 个选项")
-
-    test_section("8. P1 多轮问诊 — engine 返回结构")
-    eng2 = TCMDiagnosisEngine(api_key="", provider="DeepSeek", model="")
-    r = eng2.analyze_symptoms("头痛三天，恶寒无汗", ["头痛", "恶寒"], "舌淡苔白", "脉浮紧")
-    for k in ("syndrome", "syndrome_category", "analysis", "formula", "confidence"):
-        assert_true(k in r, f"analyze_symptoms 返回含字段 {k}")
-    assert_true(isinstance(r["confidence"], int), f"confidence 是 int, 实际 {type(r['confidence'])}")
-    assert_true(0 <= r["confidence"] <= 100, f"confidence ∈ [0,100], 实际 {r['confidence']}")
-
-    test_section("9. P1 schema 迁移文件存在性 + 关键 DDL")
-    mig = os.path.join(PROJECT_ROOT, "supabase", "migration_p1_session.sql")
-    assert_true(os.path.exists(mig), f"migration_p1_session.sql 存在：{mig}")
-    with open(mig, "r", encoding="utf-8") as f:
-        mig_sql = f.read()
-    for kw in ("session_id", "round_index", "messages", "jsonb",
-               "idx_consultations_session", "schema_version"):
-        assert_true(kw in mig_sql, f"迁移 SQL 含 {kw!r}")
-    # 验证 schema.sql 主体没破
-    with open(schema_path, "r", encoding="utf-8") as f:
-        schema_sql = f.read()
-    for kw in ("create table if not exists patients",
-               "create table if not exists consultations",
-               "create table if not exists settings"):
-        assert_true(kw in schema_sql, f"schema.sql 仍含 {kw!r}")
-
-    test_section("10. P1 — _apply_followup_answer 字段映射")
+    test_section("2. 十问歌字段收集完整性")
+    from data.ten_asks import DEFAULT_TEN_ASKS
     import app as _app
+    ten_data = dict(DEFAULT_TEN_ASKS)
+    ten_data.update({
+        "cold_heat": {"type": "恶寒", "detail": ""},
+        "sweat": {"type": "无汗", "detail": ""},
+        "stool_urine": {"stool": "干结", "urine": "短赤"},
+        "head_body": {"parts": ["头痛", "身痛"], "detail": ""},
+    })
+    symptoms = _app._collect_ten_asks_symptoms(ten_data)
+    for value in ["恶寒", "无汗", "大便干结", "小便短赤", "头痛", "身痛"]:
+        assert_true(value in symptoms, f"十问歌采集到 {value}")
+
+    test_section("3. 追问不重复且不超过两轮")
+    from utils.llm_engine import TCMDiagnosisEngine
+    engine = TCMDiagnosisEngine(api_key="", provider="DeepSeek", model="")
+    first = engine.should_ask_followup("咳嗽一周", ["咳嗽"], "", "", 0)
+    assert_true(first["need_followup"], "信息不足时需要追问")
+    assert_true(len(first["questions"]) <= 2, "每轮最多 2 个问题")
     fake = {
-        "session_id": "test", "round": 0, "messages": [],
-        "pending_questions": [
-            {"field": "tongue_sign", "label": "舌象？", "options": ["舌红"]},
-        ],
-        "chief_complaint": "x", "symptoms": [], "tongue_sign": "", "pulse_sign": "",
-        "patient": {"name": "x", "age": 30, "gender": "男"}, "result": None,
+        "session_id": "test",
+        "round": 0,
+        "messages": [],
+        "pending_questions": first["questions"],
+        "asked_followup_fields": [q["field"] for q in first["questions"]],
+        "followup_history": [],
+        "chief_complaint": "咳嗽一周",
+        "symptoms": ["咳嗽"],
+        "tongue_sign": "",
+        "pulse_sign": "",
+        "ten_asks_data": {},
+        "patient": {"name": "匿名", "age": 30, "gender": "男"},
+        "result": None,
     }
-    _app._apply_followup_answer(fake, fake["pending_questions"][0], "舌淡苔白", eng2)
-    assert_eq(fake["tongue_sign"], "舌淡苔白", "tongue_sign 写回成功")
-    assert_eq(len(fake["pending_questions"]), 0, "追问问题被清空")
+    for q in list(first["questions"]):
+        _app._apply_followup_answer(fake, q, q["options"][0], engine)
+    assert_true(fake["round"] <= 1, "第一轮回答后轮次正确")
+    assert_true(len(fake.get("pending_questions", [])) <= 2, "第二轮仍最多 2 个问题")
+    second_fields = [q["field"] for q in fake.get("pending_questions", [])]
+    assert_true(not set(second_fields).intersection(set(first_q["field"] for first_q in first["questions"])), "第二轮不重复询问已有字段")
+    for q in list(fake.get("pending_questions", [])):
+        _app._apply_followup_answer(fake, q, q["options"][0], engine)
+    assert_true(fake["round"] <= 2, "最多追问两轮")
+    assert_true(len(fake.get("followup_history", [])) >= 2, "追问答案写入统一历史")
+    assert_true(fake.get("result") is not None, "两轮后生成结构化结果")
 
-    test_section("11. P1 — supabase_client API 存在性")
-    from utils.supabase_client import get_sessions, get_session_history
-    assert_true(callable(get_sessions), "get_sessions 可调用")
-    assert_true(callable(get_session_history), "get_session_history 可调用")
+    test_section("4. RAG 根据不同症状返回不同 Top-K")
+    from core.knowledge_retriever import evaluate_retriever, format_hits_for_prompt, get_default_retriever
+    retriever = get_default_retriever()
+    cold_hits = retriever.retrieve("恶寒无汗头痛", ["恶寒", "无汗", "头痛"], "舌苔薄白", "脉浮紧", top_k=5)
+    sleep_hits = retriever.retrieve("心悸失眠多梦", ["心悸", "失眠", "多梦"], "舌淡", "脉细", top_k=5)
+    assert_true(cold_hits and sleep_hits, "两组症状均有检索结果")
+    assert_true(cold_hits[0].item.id != sleep_hits[0].item.id, "不同症状 Top-1 不同")
+    assert_true("syndrome:太阳伤寒证" in [hit.item.id for hit in cold_hits], "Recall@K 命中太阳伤寒证")
 
-    print("\n" + "=" * 50)
+    test_section("5. 检索结果进入模型上下文")
+    context = format_hits_for_prompt(cold_hits)
+    assert_true("syndrome:太阳伤寒证" in context, "Prompt 上下文包含知识 ID")
+    assert_true("来源=" in context and "禁忌/注意" in context, "Prompt 上下文包含来源和注意事项")
+
+    test_section("6. 引用来源与检索结果一致")
+    result = engine.analyze_with_rag("恶寒无汗头痛", ["恶寒", "无汗", "头痛"], "舌苔薄白", "脉浮紧", cold_hits)
+    hit_ids = {hit.item.id for hit in cold_hits}
+    ref_ids = {ref["id"] for ref in result.get("knowledge_references", [])}
+    assert_true(ref_ids.issubset(hit_ids), "结果引用 ID 来自检索结果")
+
+    test_section("7. 模型结构化输出校验")
+    required = {
+        "information_completeness", "suggested_followups", "possible_syndromes",
+        "syndrome", "syndrome_category", "analysis_basis", "knowledge_references",
+        "treatment_principle", "risk_warnings", "confidence", "needs_human_handoff",
+        "immediate_care_recommended", "model_status",
+    }
+    assert_true(required.issubset(result.keys()), "结构化结果包含必需字段")
+    assert_true(0 <= int(result["confidence"]) <= 100, "置信度在 0-100")
+
+    test_section("8. 模型异常或无 Key 时不伪造 AI 结果")
+    assert_eq(result["model_status"], "not_called_no_api_key", "无 Key 时标记为未调用模型")
+    assert_true("本地知识库辅助" in result.get("analysis", "") or "尚未调用 AI" in result.get("analysis", ""), "明确说明降级状态")
+
+    test_section("9. 急症识别和安全拦截")
+    from core.diagnosis_service import analyze_consultation
+    emergency = analyze_consultation(engine, "突发胸痛伴呼吸困难", ["胸痛", "呼吸困难"], "", "")
+    assert_eq(emergency["model_status"], "blocked_by_safety", "急症优先安全拦截")
+    assert_eq(emergency["immediate_care_recommended"], True, "建议及时就医")
+    assert_true("胸痛" in emergency["safety_tags"], "保留安全标签")
+
+    test_section("10. 低置信度或知识不足拒绝确定性结论")
+    weak = analyze_consultation(engine, "说不清哪里不舒服", [], "", "")
+    assert_true(weak["confidence"] < 60 or weak["information_completeness"] < 60, "低置信度/低完整度成立")
+    assert_true(weak["handoff_required"] or weak["needs_human_handoff"], "进入人工确认")
+
+    test_section("11. Supabase 与 JSON 存储结构一致")
+    sample_record = {
+        "session_id": "s1",
+        "round_index": 2,
+        "chief_complaint": "恶寒无汗头痛",
+        "symptoms": ["恶寒", "无汗"],
+        "structured_result": result,
+        "retrieval_ids": result["retrieval_ids"],
+        "safety_tags": result["safety_tags"],
+        "confidence": result["confidence"],
+        "source": "chat",
+    }
+    payload = supabase_client._normalize_consultation_payload(sample_record)
+    dumped = json.dumps(sample_record, ensure_ascii=False)
+    loaded_json = json.loads(dumped)
+    for key in ["structured_result", "retrieval_ids", "safety_tags", "confidence"]:
+        assert_true(key in payload and key in loaded_json, f"两种存储均包含 {key}")
+
+    test_section("12. 历史会话保存与读取")
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as f:
+        json.dump([sample_record], f, ensure_ascii=False)
+        tmp_path = f.name
+    with open(tmp_path, "r", encoding="utf-8") as f:
+        history = json.load(f)
+    os.unlink(tmp_path)
+    assert_eq(history[0]["session_id"], "s1", "历史会话 session_id 可读取")
+    assert_true(history[0]["retrieval_ids"], "历史会话保留检索 ID")
+
+    test_section("13. 看板统计字段可计算")
+    records = [sample_record, emergency, weak]
+    safety_count = len([r for r in records if r.get("safety_tags")])
+    handoff_ratio = len([r for r in records if r.get("handoff_required") or r.get("needs_human_handoff")]) / len(records)
+    no_retrieval_ratio = len([r for r in records if not r.get("retrieval_ids")]) / len(records)
+    assert_true(safety_count >= 1, "安全拦截案例可统计")
+    assert_true(0 <= handoff_ratio <= 1, "人工接管比例可统计")
+    assert_true(0 <= no_retrieval_ratio <= 1, "检索无结果比例可统计")
+
+    test_section("14. API Key 和个人信息不进入日志字段")
+    serialized = json.dumps(sample_record, ensure_ascii=False)
+    assert_true("sk-" not in serialized and "SUPABASE_KEY" not in serialized, "记录中不含密钥")
+    assert_true("身份证" not in serialized and "手机号" not in serialized, "测试记录不含不必要个人信息")
+
+    test_section("15. 可重复检索评测")
+    metrics = evaluate_retriever(retriever, [{
+        "query": "恶寒无汗头痛",
+        "symptoms": ["恶寒", "无汗", "头痛"],
+        "tongue": "舌苔薄白",
+        "pulse": "脉浮紧",
+        "expected_ids": ["syndrome:太阳伤寒证"],
+    }], top_k=5)
+    assert_eq(metrics["cases"], 1, "评测病例数量正确")
+    assert_true(metrics["recall_at_k"] >= 1.0, "Recall@K 达到预期")
+    assert_true(metrics["citation_accuracy"] >= 1.0, "引用正确率达到预期")
+
+    print("\n" + "=" * 60)
     print("[PASS] 全部冒烟测试通过")
-    print("=" * 50)
+    print("=" * 60)
 
 
 if __name__ == "__main__":

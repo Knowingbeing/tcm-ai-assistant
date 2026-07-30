@@ -1,5 +1,10 @@
 import os
+import json
+import re
 from typing import List, Dict
+
+from core.knowledge_retriever import format_hits_for_prompt, get_default_retriever
+from core.schemas import make_symptom_profile, validate_diagnosis_result
 
 try:
     from openai import OpenAI
@@ -59,6 +64,36 @@ API_PROVIDERS = {
         "key_prefix": "sk-",
     },
 }
+
+
+def _extract_json_object(text: str) -> Dict:
+    """从模型返回中提取 JSON 对象，兼容 ```json 代码块和少量前后说明。"""
+    if not text:
+        raise ValueError("模型返回为空")
+    text = text.strip()
+    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.S)
+    if fenced:
+        text = fenced.group(1)
+    if not text.startswith("{"):
+        start = text.find("{")
+        end = text.rfind("}")
+        if start >= 0 and end > start:
+            text = text[start:end + 1]
+    return json.loads(text)
+
+
+def _extract_treatment(body: str) -> str:
+    for line in (body or "").splitlines():
+        if line.startswith("治法：") or line.startswith("功效："):
+            return line.split("：", 1)[1].strip()
+    return "需四诊合参后确认治法"
+
+
+def _related_formula_name(body: str) -> str:
+    for line in (body or "").splitlines():
+        if line.startswith("相关方剂："):
+            return line.split("：", 1)[1].strip()
+    return ""
 
 class TCMDiagnosisEngine:
     def __init__(self, api_key: str = "", provider: str = "", model: str = ""):
@@ -422,6 +457,181 @@ class TCMDiagnosisEngine:
                         "formula": "无", "formula_adjustment": "无",
                         "treatment_principle": "无", "confidence": 0,
                         "additional_notes": "请截图此错误信息并联系开发者，或尝试切换其他 API 厂商。"}
+
+    def analyze_with_rag(self, chief_complaint: str, symptoms: List[str],
+                         tongue_sign: str, pulse_sign: str,
+                         knowledge_hits: List = None,
+                         safety_context: Dict = None) -> Dict:
+        """基于动态检索知识的结构化辨证辅助。
+
+        注意：无 API Key 或模型失败时，不伪造 AI 结果；仅返回本地知识辅助或失败状态。
+        """
+        retriever = get_default_retriever()
+        if knowledge_hits is None:
+            knowledge_hits = retriever.retrieve(
+                chief_complaint,
+                symptoms or [],
+                tongue_sign,
+                pulse_sign,
+                top_k=8,
+            )
+        profile = make_symptom_profile(chief_complaint, symptoms or [], tongue_sign, pulse_sign)
+        knowledge_context = format_hits_for_prompt(knowledge_hits)
+        if not knowledge_hits:
+            raw = {
+                "information_completeness": profile["information_completeness"],
+                "suggested_followups": [],
+                "possible_syndromes": [],
+                "syndrome": "暂不形成确定性结论",
+                "syndrome_category": "知识不足",
+                "analysis_basis": ["本地知识库未检索到足够相关的证型、方剂或中药依据。"],
+                "formula": "知识不足，不提供方剂参考",
+                "treatment_principle": "建议补充信息并由专业人士确认",
+                "treatment_knowledge": "",
+                "analysis": "由于缺少可靠检索依据，本次不生成确定性辨证结论。",
+                "risk_warnings": ["本产品仅用于知识辅助和信息结构化，不替代执业医师。"],
+                "confidence": 0,
+                "needs_human_handoff": True,
+                "handoff_reason": "检索无可靠依据",
+                "immediate_care_recommended": False,
+                "model_status": "knowledge_not_found",
+            }
+            result, _ = validate_diagnosis_result(raw, profile, knowledge_hits, model_status="knowledge_not_found")
+            result["retrieval_ids"] = []
+            result["safety_tags"] = []
+            return result
+
+        if not self.has_api_key:
+            raw = self._knowledge_based_assist(profile, knowledge_hits)
+            result, warnings = validate_diagnosis_result(raw, profile, knowledge_hits, model_status="not_called_no_api_key")
+            result["validation_warnings"] = warnings
+            result["retrieval_ids"] = [hit.item.id for hit in knowledge_hits]
+            result["safety_tags"] = []
+            return result
+
+        prompt = f"""
+你是中医知识辅助系统的信息整理员，不是替代医生的诊断系统。
+请只基于【本次问诊信息】和【动态检索到的知识】输出结构化 JSON。
+不得直接开处方；方剂和中药只能作为知识引用，不得写成“照方服药”。
+若信息不足、证据不足或置信度低，请明确拒绝形成确定性结论。
+
+【本次问诊信息】
+主诉：{chief_complaint or "未填写"}
+伴随症状：{", ".join(symptoms or []) or "未填写"}
+舌象：{tongue_sign or "未填写"}
+脉象：{pulse_sign or "未填写"}
+信息完整度：{profile["information_completeness"]}%
+安全标签：{", ".join((safety_context or {}).get("tags", [])) or "无"}
+
+【动态检索到的知识 Top-K】
+{knowledge_context}
+
+请严格返回 JSON 对象，字段必须包含：
+{{
+  "information_completeness": 0-100,
+  "suggested_followups": [{{"field": "字段", "question": "追问"}}],
+  "possible_syndromes": [{{"name": "可能证型", "category": "辨证体系", "confidence": 0-100, "basis": "依据", "knowledge_ids": ["引用ID"]}}],
+  "syndrome": "最可能证型或暂不形成确定性结论",
+  "syndrome_category": "辨证体系",
+  "analysis_basis": ["依据1", "依据2"],
+  "knowledge_references": ["只能使用上方知识ID"],
+  "formula": "知识参考，非处方",
+  "formula_adjustment": "不要给具体服药剂量",
+  "treatment_principle": "治法知识说明",
+  "treatment_knowledge": "治法相关知识",
+  "analysis": "简明分析",
+  "risk_warnings": ["安全提示"],
+  "confidence": 0-100,
+  "needs_human_handoff": true/false,
+  "handoff_reason": "人工接管原因",
+  "immediate_care_recommended": true/false
+}}
+"""
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "你只输出可解析 JSON。所有医疗安全提示必须保持谨慎，不得弱化。"},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.2,
+                max_tokens=1800,
+            )
+            raw = _extract_json_object(response.choices[0].message.content or "")
+            raw["model_status"] = "ok"
+            result, warnings = validate_diagnosis_result(raw, profile, knowledge_hits, model_status="ok")
+            result["validation_warnings"] = warnings
+            result["model_name"] = self.model
+            result["retrieval_ids"] = [hit.item.id for hit in knowledge_hits]
+            result["safety_tags"] = []
+            return result
+        except Exception as e:
+            raw = {
+                "information_completeness": profile["information_completeness"],
+                "suggested_followups": [],
+                "possible_syndromes": [],
+                "syndrome": "模型分析失败",
+                "syndrome_category": "模型错误",
+                "analysis_basis": [f"模型调用或结构化解析失败：{str(e)[:200]}"],
+                "formula": "无",
+                "treatment_principle": "无",
+                "analysis": "本次没有生成 AI 结构化结果，请检查模型配置后重试。",
+                "risk_warnings": ["模型失败时不展示伪造 AI 结果。"],
+                "confidence": 0,
+                "needs_human_handoff": True,
+                "handoff_reason": "模型不可用或输出未通过结构化校验",
+                "immediate_care_recommended": False,
+                "model_status": "model_failed",
+            }
+            result, warnings = validate_diagnosis_result(raw, profile, knowledge_hits, model_status="model_failed")
+            result["validation_warnings"] = warnings
+            result["model_error"] = str(e)[:300]
+            result["model_name"] = self.model
+            result["retrieval_ids"] = [hit.item.id for hit in knowledge_hits]
+            result["safety_tags"] = []
+            return result
+
+    def _knowledge_based_assist(self, profile: Dict, knowledge_hits: List) -> Dict:
+        syndrome_hits = [hit for hit in knowledge_hits if hit.item.type == "syndrome"]
+        formula_hits = [hit for hit in knowledge_hits if hit.item.type == "formula"]
+        top_syndrome = syndrome_hits[0] if syndrome_hits else knowledge_hits[0]
+        top_formula = formula_hits[0] if formula_hits else None
+        confidence = min(72, max(35, int(top_syndrome.score * 1.7)))
+        candidates = [
+            {
+                "name": hit.item.name,
+                "category": hit.item.syndrome_category,
+                "confidence": min(75, max(30, int(hit.score * 1.7))),
+                "basis": f"命中关键词：{', '.join(hit.matched_terms[:5])}",
+                "knowledge_ids": [hit.item.id],
+            }
+            for hit in syndrome_hits[:3]
+        ]
+        return {
+            "information_completeness": profile["information_completeness"],
+            "suggested_followups": [],
+            "possible_syndromes": candidates,
+            "syndrome": top_syndrome.item.name if candidates else "暂不形成确定性结论",
+            "syndrome_category": top_syndrome.item.syndrome_category,
+            "analysis_basis": [
+                f"本地知识检索命中：{top_syndrome.item.name}",
+                f"匹配词：{', '.join(top_syndrome.matched_terms[:6]) or '字段相关'}",
+            ],
+            "formula": _related_formula_name(top_syndrome.item.body) or (top_formula.item.name if top_formula else "知识参考，非处方"),
+            "formula_adjustment": "本地知识仅用于学习参考，不提供处方加减。",
+            "treatment_principle": _extract_treatment(top_syndrome.item.body),
+            "treatment_knowledge": top_syndrome.item.body,
+            "analysis": "当前为本地知识库辅助整理结果，尚未调用 AI 模型；请结合完整四诊信息并由专业人士确认。",
+            "risk_warnings": [
+                "本结果不是诊断结论，不替代执业医师。",
+                "方剂和中药只作为知识引用，不可据此自行服药。",
+            ],
+            "confidence": confidence,
+            "needs_human_handoff": confidence < 65 or profile["information_completeness"] < 70,
+            "handoff_reason": "未调用模型，仅供知识辅助参考" if confidence >= 65 else "置信度或信息完整度不足",
+            "immediate_care_recommended": False,
+            "model_status": "not_called_no_api_key",
+        }
 
     def analyze_symptoms(self, chief_complaint: str, symptoms: List[str],
                         tongue_sign: str, pulse_sign: str) -> Dict:
